@@ -7,10 +7,12 @@ using Microsoft.Phone.Shell;
 using System.IO.IsolatedStorage;
 using System.Net;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.ComponentModel;
 using Microsoft.Xna.Framework.Media;
 using System.IO;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using Windows.Storage;
 using Windows.Storage.Pickers;
@@ -22,6 +24,9 @@ namespace LumiaYD
     {
         private const string LoginKey = "YandexLogin";
         private const string PasswordKey = "YandexPassword";
+        private const string CurrentPathKey = "CurrentPath";
+        private const string PendingDownloadNameKey = "PendingDownloadName";
+        private const string PendingDownloadHrefKey = "PendingDownloadHref";
 
         private string _login;
         private string _password;
@@ -30,11 +35,26 @@ namespace LumiaYD
         private string currentPath = "/";
         private YandexFileItem selectedItem = null;
         private YandexFileItem _pendingDownloadFile;
+        private readonly ObservableCollection<TransferItem> _transfers = new ObservableCollection<TransferItem>();
+
+        private YandexWebDavClient _webDav;
+        private int _folderRequestId;
+        private CancellationTokenSource _folderCancellation;
+        private CancellationTokenSource _quotaCancellation;
 
         public MainPage()
         {
             InitializeComponent();
             this.BackKeyPress += MainPage_BackKeyPress;
+
+            TransferListBox.ItemsSource = _transfers;
+            _transfers.CollectionChanged += (s, e) => UpdateTransfersEmptyState();
+            UpdateTransfersEmptyState();
+        }
+
+        private void UpdateTransfersEmptyState()
+        {
+            SyncStatusText.Visibility = _transfers.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         }
 
         private void MainPage_BackKeyPress(object sender, System.ComponentModel.CancelEventArgs e)
@@ -80,12 +100,23 @@ namespace LumiaYD
                 {
                     ContinueFileSavePicker(args);
                 }
+                else
+                {
+                    _pendingDownloadFile = null;
+                    ClearPendingDownload();
+                }
             }
         }
 
         private void LoadCredentials()
         {
             var settings = IsolatedStorageSettings.ApplicationSettings;
+
+            string savedPath = settings.Contains(CurrentPathKey) ? settings[CurrentPathKey] as string : null;
+            currentPath = (!string.IsNullOrEmpty(savedPath) && savedPath.StartsWith("/")) ? savedPath : "/";
+
+            RestorePendingDownload(settings);
+
             if (settings.Contains(LoginKey) && settings.Contains(PasswordKey))
             {
                 _login = settings[LoginKey] as string;
@@ -98,6 +129,46 @@ namespace LumiaYD
             }
 
             ShowAuth();
+        }
+
+        private void RestorePendingDownload(IsolatedStorageSettings settings)
+        {
+            string name = settings.Contains(PendingDownloadNameKey) ? settings[PendingDownloadNameKey] as string : null;
+            string href = settings.Contains(PendingDownloadHrefKey) ? settings[PendingDownloadHrefKey] as string : null;
+
+            if (!string.IsNullOrEmpty(name) && !string.IsNullOrEmpty(href))
+            {
+                _pendingDownloadFile = new YandexFileItem
+                {
+                    Name = name,
+                    Href = href,
+                    IsFolder = false,
+                    Info = ""
+                };
+            }
+        }
+
+        private static void SaveSetting(string key, object value)
+        {
+            var settings = IsolatedStorageSettings.ApplicationSettings;
+            settings[key] = value;
+            settings.Save();
+        }
+
+        private static void SavePendingDownload(YandexFileItem file)
+        {
+            var settings = IsolatedStorageSettings.ApplicationSettings;
+            settings[PendingDownloadNameKey] = file.Name;
+            settings[PendingDownloadHrefKey] = file.Href;
+            settings.Save();
+        }
+
+        private static void ClearPendingDownload()
+        {
+            var settings = IsolatedStorageSettings.ApplicationSettings;
+            settings.Remove(PendingDownloadNameKey);
+            settings.Remove(PendingDownloadHrefKey);
+            settings.Save();
         }
 
         private void ShowAuth()
@@ -149,33 +220,13 @@ namespace LumiaYD
         {
             try
             {
-                HttpWebRequest request = (HttpWebRequest)WebRequest.Create("https://webdav.yandex.ru/");
-                request.Method = "PROPFIND";
-                request.ContentType = "application/xml; charset=utf-8";
-                request.UserAgent = "LumiaYD/1.0 (Windows Phone 8.1)";
-                request.Headers["Authorization"] = MakeAuthHeader(login, password);
-                request.Headers["Depth"] = "0";
-
-                string xmlPayload = "<?xml version=\"1.0\" encoding=\"utf-8\" ?><propfind xmlns=\"DAV:\"><prop><displayname/></prop></propfind>";
-                byte[] bytes = Encoding.UTF8.GetBytes(xmlPayload);
-                request.ContentLength = bytes.Length;
-
-                using (Stream requestStream = await Task.Factory.FromAsync<Stream>(
-                    request.BeginGetRequestStream, request.EndGetRequestStream, null))
-                {
-                    await requestStream.WriteAsync(bytes, 0, bytes.Length);
-                }
-
-                using (WebResponse response = await Task.Factory.FromAsync<WebResponse>(
-                    request.BeginGetResponse, request.EndGetResponse, null))
-                {
-                    return (int)((HttpWebResponse)response).StatusCode == 207;
-                }
+                var client = new YandexWebDavClient(login, password);
+                await client.TestConnectionAsync(CancellationToken.None);
+                return true;
             }
-            catch (WebException ex)
+            catch (WebDavException ex)
             {
-                HttpWebResponse response = ex.Response as HttpWebResponse;
-                if (response != null && response.StatusCode == HttpStatusCode.Unauthorized)
+                if (ex.StatusCode == HttpStatusCode.Unauthorized)
                 {
                     return false;
                 }
@@ -190,12 +241,6 @@ namespace LumiaYD
             }
         }
 
-        private static string MakeAuthHeader(string login, string password)
-        {
-            string pair = login + ":" + password.Replace(" ", "");
-            return "Basic " + Convert.ToBase64String(Encoding.UTF8.GetBytes(pair));
-        }
-
         private void SaveCredentials()
         {
             var settings = IsolatedStorageSettings.ApplicationSettings;
@@ -206,6 +251,10 @@ namespace LumiaYD
 
         private void ClearCredentials()
         {
+            CancelFolderRequest();
+            CancelQuotaRequest();
+            _webDav = null;
+
             var settings = IsolatedStorageSettings.ApplicationSettings;
             settings.Remove(LoginKey);
             settings.Remove(PasswordKey);
@@ -217,6 +266,9 @@ namespace LumiaYD
         private void HandleUnauthorized()
         {
             ClearCredentials();
+            _pendingDownloadFile = null;
+            ClearPendingDownload();
+            _transfers.Clear();
             FilesListBox.ItemsSource = null;
             MainPivot.Visibility = Visibility.Collapsed;
             ShowAuth();
@@ -226,8 +278,12 @@ namespace LumiaYD
         private void LogoutButton_Click(object sender, RoutedEventArgs e)
         {
             ClearCredentials();
+            _pendingDownloadFile = null;
+            ClearPendingDownload();
+            _transfers.Clear();
             FilesListBox.ItemsSource = null;
-            TransferListBox.ItemsSource = null;
+            currentPath = "/";
+            SaveSetting(CurrentPathKey, "/");
             MainPivot.Visibility = Visibility.Collapsed;
             ShowAuth();
         }
@@ -237,7 +293,9 @@ namespace LumiaYD
             AuthArea.Visibility = Visibility.Collapsed;
             MainPivot.Visibility = Visibility.Visible;
             CurrentAccountText.Text = _login;
+            _webDav = new YandexWebDavClient(_login, _password);
             LoadFolder(currentPath);
+            LoadQuotaAsync();
         }
 
         private string GetParentPath(string path)
@@ -247,57 +305,151 @@ namespace LumiaYD
             return idx <= 0 ? "/" : p.Substring(0, idx + 1);
         }
 
-        private void LoadFolder(string path)
+        private void CancelFolderRequest()
         {
-            if (string.IsNullOrEmpty(_login) || string.IsNullOrEmpty(_password))
+            _folderRequestId++;
+
+            if (_folderCancellation != null)
+            {
+                _folderCancellation.Cancel();
+                _folderCancellation = null;
+            }
+        }
+
+        private void CancelQuotaRequest()
+        {
+            if (_quotaCancellation != null)
+            {
+                _quotaCancellation.Cancel();
+                _quotaCancellation = null;
+            }
+        }
+
+        private async void LoadFolder(string path)
+        {
+            if (_webDav == null || string.IsNullOrEmpty(_login) || string.IsNullOrEmpty(_password))
             {
                 ShowAuth();
                 return;
             }
 
+            CancelFolderRequest();
+            _folderCancellation = new CancellationTokenSource();
+            CancellationToken token = _folderCancellation.Token;
+            int requestId = _folderRequestId;
+
             currentPath = path;
             string pretty = Uri.UnescapeDataString(path).Trim('/');
             CurrentPathText.Text = pretty == "" ? "диск / ЗАГРУЗКА..." : "диск / " + pretty + " ЗАГРУЗКА...";
+
             try
             {
-                string url = "https://webdav.yandex.ru" + path;
-                HttpWebRequest request = (HttpWebRequest)WebRequest.Create(url);
-                request.Method = "PROPFIND";
-                request.AllowReadStreamBuffering = true;
-                request.ContentType = "application/xml; charset=utf-8";
-                request.UserAgent = "Mozilla/5.0 (Windows Phone 8.1; ARM; Trident/7.0; IEMobile/11.0; NOKIA; Lumia 925)";
-
-                request.Headers["Authorization"] = MakeAuthHeader(_login, _password);
-                request.Headers["Depth"] = "1";
-
-                string xmlPayload = "<?xml version=\"1.0\" encoding=\"utf-8\" ?><propfind xmlns=\"DAV:\"><prop><displayname/><resourcetype/><getcontentlength/></prop></propfind>";
-                byte[] bytes = System.Text.Encoding.UTF8.GetBytes(xmlPayload);
-                request.ContentLength = bytes.Length;
-
-                request.BeginGetRequestStream(new AsyncCallback(asynchronousResult =>
+                List<YandexFileItem> files = await _webDav.GetFolderAsync(path, token);
+                if (requestId != _folderRequestId)
                 {
-                    try
+                    return;
+                }
+
+                if (path != "/")
+                {
+                    files.Insert(0, new YandexFileItem
                     {
-                        HttpWebRequest req = (HttpWebRequest)asynchronousResult.AsyncState;
-                        using (System.IO.Stream postStream = req.EndGetRequestStream(asynchronousResult))
-                        {
-                            postStream.Write(bytes, 0, bytes.Length);
-                            postStream.Flush();
-                        }
-                        req.BeginGetResponse(new AsyncCallback(PropFindCompleted), req);
-                    }
-                    catch (Exception ex)
-                    {
-                        Deployment.Current.Dispatcher.BeginInvoke(() =>
-                        {
-                            MessageBox.Show("Ошибка потока WP:\n" + ex.Message, "Сбой", MessageBoxButton.OK);
-                        });
-                    }
-                }), request);
+                        Name = "..",
+                        Info = "подняться на уровень вверх",
+                        Href = GetParentPath(path),
+                        IsFolder = true
+                    });
+                }
+
+                FilesListBox.ItemsSource = files;
+                SaveSetting(CurrentPathKey, path);
+
+                int itemCount = files.Count - (path != "/" ? 1 : 0);
+                CurrentPathText.Text = pretty == ""
+                    ? "диск / (" + itemCount + " элементов)"
+                    : "диск / " + pretty + " (" + itemCount + " элементов)";
+            }
+            catch (OperationCanceledException)
+            {
+            }
+            catch (WebDavException ex)
+            {
+                if (requestId != _folderRequestId)
+                {
+                    return;
+                }
+
+                if (ex.StatusCode == HttpStatusCode.Unauthorized)
+                {
+                    HandleUnauthorized();
+                    return;
+                }
+
+                if (ex.StatusCode == HttpStatusCode.NotFound && path != "/")
+                {
+                    MessageBox.Show("Папка не найдена. Открываю корень Диска.", "Инфо", MessageBoxButton.OK);
+                    LoadFolder("/");
+                    return;
+                }
+
+                CurrentPathText.Text = "диск / ОШИБКА";
+                MessageBox.Show("Не удалось открыть папку:\n" + ex.Message, "Сбой", MessageBoxButton.OK);
             }
             catch (Exception ex)
             {
-                MessageBox.Show("Ошибка создания WebRequest:\n" + ex.Message, "Сбой", MessageBoxButton.OK);
+                if (requestId != _folderRequestId)
+                {
+                    return;
+                }
+
+                CurrentPathText.Text = "диск / ОШИБКА";
+                MessageBox.Show("Ошибка при открытии папки:\n" + ex.Message, "Сбой", MessageBoxButton.OK);
+            }
+        }
+
+        private async void LoadQuotaAsync()
+        {
+            var client = _webDav;
+            if (client == null)
+            {
+                return;
+            }
+
+            CancelQuotaRequest();
+            _quotaCancellation = new CancellationTokenSource();
+            CancellationToken token = _quotaCancellation.Token;
+
+            try
+            {
+                QuotaInfo quota = await client.GetQuotaAsync(token);
+                if (token.IsCancellationRequested)
+                {
+                    return;
+                }
+
+                if (quota == null)
+                {
+                    StorageText.Text = "Недоступно";
+                }
+                else if (quota.HasAvailable)
+                {
+                    StorageText.Text = YandexWebDavClient.FormatSize(quota.UsedBytes) + " из " +
+                                       YandexWebDavClient.FormatSize(quota.TotalBytes);
+                }
+                else
+                {
+                    StorageText.Text = "Использовано " + YandexWebDavClient.FormatSize(quota.UsedBytes);
+                }
+            }
+            catch (OperationCanceledException)
+            {
+            }
+            catch (Exception)
+            {
+                if (!token.IsCancellationRequested)
+                {
+                    StorageText.Text = "Недоступно";
+                }
             }
         }
 
@@ -341,7 +493,7 @@ namespace LumiaYD
 
         private void ShowActionPanel(bool isFolder)
         {
-            DownloadButton.Visibility = Visibility.Visible;
+            DownloadButton.Visibility = isFolder ? Visibility.Collapsed : Visibility.Visible;
             UploadButton.Visibility = isFolder ? Visibility.Visible : Visibility.Collapsed;
             BottomActionPanel.Visibility = Visibility.Visible;
         }
@@ -369,7 +521,15 @@ namespace LumiaYD
 
         private void DownloadFile(YandexFileItem file)
         {
-            string extension = Path.GetExtension(file.Name).ToLower();
+            string safeName = SanitizeFileName(file.Name);
+            string extension = Path.GetExtension(safeName);
+
+            if (string.IsNullOrEmpty(extension) || extension == ".")
+            {
+                extension = ".bin";
+            }
+
+            extension = extension.ToLowerInvariant();
 
             // КАРТИНКИ — сразу в галерею
             if (extension == ".jpg" || extension == ".jpeg" || extension == ".png")
@@ -381,173 +541,238 @@ namespace LumiaYD
             // ОСТАЛЬНЫЕ ФАЙЛЫ — через FileSavePicker
             var savePicker = new FileSavePicker();
             savePicker.SuggestedStartLocation = PickerLocationId.DocumentsLibrary;
-
-            if (!string.IsNullOrEmpty(extension))
-            {
-                savePicker.FileTypeChoices.Add("Файлы", new List<string>() { extension });
-            }
-            else
-            {
-                savePicker.FileTypeChoices.Add("Все файлы", new List<string>() { ".*" });
-            }
-            savePicker.SuggestedFileName = file.Name;
+            savePicker.FileTypeChoices.Add("Файлы", new List<string>() { extension });
+            savePicker.SuggestedFileName = safeName;
 
             _pendingDownloadFile = file;
-            savePicker.PickSaveFileAndContinue();
+            SavePendingDownload(file);
+
+            try
+            {
+                savePicker.PickSaveFileAndContinue();
+            }
+            catch (Exception ex)
+            {
+                _pendingDownloadFile = null;
+                ClearPendingDownload();
+                MessageBox.Show("Не удалось открыть выбор файла:\n" + ex.Message, "Сбой", MessageBoxButton.OK);
+            }
         }
 
-        private async void DownloadImageToGallery(YandexFileItem file)
+        private static TransferItem CreateTransfer(string fileName, string status)
         {
-            var transfer = new TransferItem
+            return new TransferItem
             {
-                FileName = file.Name,
+                FileName = fileName,
                 Progress = 0,
-                StatusText = "Скачивание...",
+                StatusText = status,
                 ProgressText = "0%",
                 IconPath = "M12 4 L12 16 M12 16 L7 11 M12 16 L17 11",
                 IconColor = "#0078D7"
             };
+        }
 
-            var transfers = TransferListBox.ItemsSource as List<TransferItem>;
-            if (transfers == null)
+        private async void DownloadImageToGallery(YandexFileItem file)
+        {
+            var transfer = CreateTransfer(file.Name, "Скачивание...");
+            _transfers.Add(transfer);
+
+            StorageFile tempFile = null;
+            string safeName = SanitizeFileName(file.Name);
+            var client = _webDav;
+
+            if (client == null)
             {
-                transfers = new List<TransferItem>();
-                TransferListBox.ItemsSource = transfers;
-                SyncStatusText.Text = "";
+                transfer.StatusText = "Ошибка авторизации";
+                transfer.IconColor = "#E81123";
+                return;
             }
-            transfers.Add(transfer);
 
             try
             {
-                var request = (HttpWebRequest)WebRequest.Create("https://webdav.yandex.ru" + file.Href);
-                request.Method = "GET";
-                request.AllowReadStreamBuffering = false;
-                request.Headers["Authorization"] = MakeAuthHeader(_login, _password);
+                tempFile = await ApplicationData.Current.TemporaryFolder.CreateFileAsync(
+                    safeName, CreationCollisionOption.GenerateUniqueName);
 
-                var response = await Task.Factory.FromAsync<WebResponse>(request.BeginGetResponse, request.EndGetResponse, null);
+                var request = client.CreateDownloadRequest(file.Href);
+
+                var response = await Task.Factory.FromAsync<WebResponse>(
+                    request.BeginGetResponse, request.EndGetResponse, null);
 
                 using (var httpResponse = (HttpWebResponse)response)
                 using (Stream responseStream = httpResponse.GetResponseStream())
-                using (var memoryStream = new MemoryStream())
+                using (var fileStream = await tempFile.OpenStreamForWriteAsync())
                 {
                     long totalBytes = httpResponse.ContentLength;
-                    byte[] buffer = new byte[16384];
                     long bytesRead = 0;
+                    int lastProgress = -1;
+                    byte[] buffer = new byte[16384];
                     int read;
 
                     while ((read = await responseStream.ReadAsync(buffer, 0, buffer.Length)) > 0)
                     {
-                        await memoryStream.WriteAsync(buffer, 0, read);
+                        await fileStream.WriteAsync(buffer, 0, read);
                         bytesRead += read;
 
-                        if (totalBytes > 0 && (bytesRead % (16384 * 10) == 0 || bytesRead == totalBytes))
+                        if (totalBytes > 0)
                         {
                             int progress = (int)((bytesRead * 100) / totalBytes);
-                            Deployment.Current.Dispatcher.BeginInvoke(() => transfer.Progress = progress);
+                            if (progress != lastProgress)
+                            {
+                                lastProgress = progress;
+                                int capturedProgress = progress;
+                                Deployment.Current.Dispatcher.BeginInvoke(() => transfer.Progress = capturedProgress);
+                            }
                         }
                     }
 
-                    memoryStream.Position = 0;
-                    using (var mediaLibrary = new MediaLibrary())
-                    {
-                        mediaLibrary.SavePicture(file.Name, memoryStream);
-                    }
-
-                    Deployment.Current.Dispatcher.BeginInvoke(() =>
-                    {
-                        transfer.StatusText = "В галерее";
-                        transfer.Progress = 100;
-                        MessageBox.Show("Картинка сохранена в галерею!\nЧерез USB: Phone\\Pictures", "Успех", MessageBoxButton.OK);
-                    });
+                    await fileStream.FlushAsync();
                 }
+
+                using (var readStream = await tempFile.OpenStreamForReadAsync())
+                using (var mediaLibrary = new MediaLibrary())
+                {
+                    mediaLibrary.SavePicture(safeName, readStream);
+                }
+
+                transfer.StatusText = "В галерее";
+                transfer.Progress = 100;
+                MessageBox.Show("Картинка сохранена в галерею!\nЧерез USB: Phone\\Pictures", "Успех", MessageBoxButton.OK);
             }
             catch (Exception ex)
             {
-                Deployment.Current.Dispatcher.BeginInvoke(() =>
+                transfer.StatusText = "Ошибка";
+                transfer.IconColor = "#E81123";
+                MessageBox.Show("Ошибка при скачивании картинки:\n" + ex.Message, "Сбой", MessageBoxButton.OK);
+            }
+            finally
+            {
+                if (tempFile != null)
                 {
-                    transfer.StatusText = "Ошибка";
-                    transfer.IconColor = "#E81123";
-                    MessageBox.Show("Ошибка при скачивании картинки:\n" + ex.Message, "Сбой", MessageBoxButton.OK);
-                });
+                    // Удаление временного файла запускаем без await:
+                    // в C# 5 (VS2013) нельзя использовать await в finally.
+                    DeleteTempFile(tempFile);
+                }
             }
         }
+
+        private static async void DeleteTempFile(StorageFile file)
+        {
+            try
+            {
+                await file.DeleteAsync(StorageDeleteOption.PermanentDelete);
+            }
+            catch
+            {
+            }
+        }
+
         public void ContinueFileSavePicker(FileSavePickerContinuationEventArgs args)
         {
+            if (_pendingDownloadFile == null)
+            {
+                RestorePendingDownload(IsolatedStorageSettings.ApplicationSettings);
+            }
+
             if (args.File != null && _pendingDownloadFile != null)
             {
                 var fileToDownload = _pendingDownloadFile;
                 _pendingDownloadFile = null;
+                ClearPendingDownload();
 
-                var transfer = new TransferItem
-                {
-                    FileName = fileToDownload.Name,
-                    Progress = 0,
-                    StatusText = "Скачивание...",
-                    ProgressText = "0%",
-                    IconPath = "M12 4 L12 16 M12 16 L7 11 M12 16 L17 11",
-                    IconColor = "#0078D7"
-                };
-
-                var transfers = TransferListBox.ItemsSource as List<TransferItem>;
-                if (transfers == null)
-                {
-                    transfers = new List<TransferItem>();
-                    TransferListBox.ItemsSource = transfers;
-                    SyncStatusText.Text = "";
-                }
-                transfers.Add(transfer);
+                var transfer = CreateTransfer(fileToDownload.Name, "Скачивание...");
+                _transfers.Add(transfer);
 
                 StartDownloadToStorageFile(fileToDownload, args.File, transfer);
             }
             else
             {
+                _pendingDownloadFile = null;
+                ClearPendingDownload();
                 MessageBox.Show("Скачивание отменено", "Инфо", MessageBoxButton.OK);
             }
         }
 
         private async void StartDownloadToStorageFile(YandexFileItem file, StorageFile targetFile, TransferItem transfer)
         {
-            int maxRetries = 5; // Увеличим количество попыток
-            int currentRetry = 0;
+            const int maxRetries = 5;
+            int attempt = 0;
             long totalBytesRead = 0;
             long totalBytes = 0;
             bool isCompleted = false;
+            bool shouldRetry = true;
             Exception lastError = null;
+            int lastProgress = -1;
 
-            while (currentRetry < maxRetries && !isCompleted)
+            var client = _webDav;
+            if (client == null)
             {
+                transfer.StatusText = "Ошибка авторизации";
+                transfer.IconColor = "#E81123";
+                return;
+            }
+
+            while (attempt < maxRetries && !isCompleted)
+            {
+                attempt++;
                 lastError = null;
 
                 try
                 {
-                    var request = (HttpWebRequest)WebRequest.Create("https://webdav.yandex.ru" + file.Href);
-                    request.Method = "GET";
-                    request.AllowReadStreamBuffering = false;
-
-                    request.Headers["Authorization"] = MakeAuthHeader(_login, _password);
+                    var request = client.CreateDownloadRequest(file.Href);
 
                     if (totalBytesRead > 0)
                     {
-                        request.Headers["Range"] = "bytes=" + totalBytesRead + "-";
-                        Deployment.Current.Dispatcher.BeginInvoke(() =>
+                        if (TrySetRangeHeader(request, totalBytesRead))
                         {
                             transfer.StatusText = "Восстановление связи...";
-                        });
+                        }
+                        else
+                        {
+                            // Range не поддерживается — скачиваем файл заново.
+                            totalBytesRead = 0;
+                            totalBytes = 0;
+                            lastProgress = -1;
+                        }
                     }
 
-                    var response = await Task.Factory.FromAsync<WebResponse>(request.BeginGetResponse, request.EndGetResponse, null);
+                    var response = await Task.Factory.FromAsync<WebResponse>(
+                        request.BeginGetResponse, request.EndGetResponse, null);
 
                     using (var httpResponse = (HttpWebResponse)response)
                     {
-                        if (totalBytes == 0)
-                            totalBytes = httpResponse.ContentLength + totalBytesRead;
+                        int statusCode = (int)httpResponse.StatusCode;
+                        long contentLength = httpResponse.ContentLength;
+
+                        if (totalBytesRead > 0 && statusCode == 200)
+                        {
+                            // Сервер проигнорировал Range — начинаем файл заново.
+                            totalBytesRead = 0;
+                            totalBytes = contentLength;
+                            lastProgress = -1;
+                        }
+                        else if (statusCode == 206)
+                        {
+                            // 206 — сервер вернул только остаток файла.
+                            if (contentLength > 0)
+                            {
+                                totalBytes = totalBytesRead + contentLength;
+                            }
+                        }
+                        else
+                        {
+                            totalBytes = contentLength;
+                        }
 
                         using (Stream responseStream = httpResponse.GetResponseStream())
                         using (var fileStream = await targetFile.OpenStreamForWriteAsync())
                         {
-                            if (totalBytesRead > 0)
+                            if (totalBytesRead == 0)
                             {
-                                fileStream.Seek(totalBytesRead, System.IO.SeekOrigin.Begin);
+                                fileStream.SetLength(0);
+                            }
+                            else
+                            {
+                                fileStream.Seek(totalBytesRead, SeekOrigin.Begin);
                             }
 
                             byte[] buffer = new byte[16384];
@@ -558,10 +783,15 @@ namespace LumiaYD
                                 await fileStream.WriteAsync(buffer, 0, read);
                                 totalBytesRead += read;
 
-                                if (totalBytes > 0 && (totalBytesRead % (16384 * 10) == 0 || totalBytesRead == totalBytes))
+                                if (totalBytes > 0)
                                 {
                                     int progress = (int)((totalBytesRead * 100) / totalBytes);
-                                    Deployment.Current.Dispatcher.BeginInvoke(() => transfer.Progress = progress);
+                                    if (progress != lastProgress)
+                                    {
+                                        lastProgress = progress;
+                                        int capturedProgress = progress;
+                                        Deployment.Current.Dispatcher.BeginInvoke(() => transfer.Progress = capturedProgress);
+                                    }
                                 }
                             }
 
@@ -569,201 +799,119 @@ namespace LumiaYD
                         }
                     }
 
-                    // --- ГЛАВНАЯ ПРОВЕРКА ---
-                    // Если мы скачали меньше, чем должны были, выбрасываем ошибку, чтобы сработал retry
                     if (totalBytes > 0 && totalBytesRead < totalBytes)
                     {
-                        throw new Exception("Соединение оборвалось. Скачано " + totalBytesRead + " из " + totalBytes + " байт.");
+                        throw new IOException("Соединение оборвалось. Скачано " + totalBytesRead + " из " + totalBytes + " байт.");
                     }
 
                     isCompleted = true;
                 }
-                catch (Exception ex)
+                catch (WebException ex)
                 {
-                    currentRetry++;
                     lastError = ex;
 
-                    if (currentRetry < maxRetries)
+                    var errorResponse = ex.Response as HttpWebResponse;
+                    if (errorResponse != null)
                     {
-                        Deployment.Current.Dispatcher.BeginInvoke(() =>
+                        int errorStatus = (int)errorResponse.StatusCode;
+                        if (errorStatus == 401 || errorStatus == 403)
                         {
-                            transfer.StatusText = "Обрыв! Попытка " + (currentRetry + 1) + "...";
-                        });
+                            // Нет смысла повторять: логин/пароль больше не подходят.
+                            shouldRetry = false;
+                        }
+                        else if (errorStatus == 416)
+                        {
+                            // Range не принят. Если файл уже скачан целиком — это успех,
+                            // иначе начинаем заново с нуля.
+                            if (totalBytes > 0 && totalBytesRead >= totalBytes)
+                            {
+                                isCompleted = true;
+                            }
+                            else
+                            {
+                                totalBytesRead = 0;
+                                totalBytes = 0;
+                                lastProgress = -1;
+                            }
+                        }
+
+                        errorResponse.Dispose();
                     }
                 }
-
-                if (lastError != null && currentRetry < maxRetries)
+                catch (Exception ex)
                 {
-                    await Task.Delay(3000);
+                    lastError = ex;
+                }
+
+                if (!isCompleted && shouldRetry && attempt < maxRetries)
+                {
+                    transfer.StatusText = "Обрыв. Попытка " + (attempt + 1) + " из " + maxRetries + "...";
+                    await Task.Delay(2000);
                 }
             }
 
             if (isCompleted)
             {
-                Deployment.Current.Dispatcher.BeginInvoke(() =>
-                {
-                    transfer.StatusText = "Готово";
-                    transfer.Progress = 100;
-                    MessageBox.Show("Файл сохранён в выбранную папку!\nТеперь он виден через USB.", "Успех", MessageBoxButton.OK);
-                });
+                transfer.StatusText = "Готово";
+                transfer.Progress = 100;
+                MessageBox.Show("Файл сохранён в выбранную папку!\nТеперь он виден через USB.", "Успех", MessageBoxButton.OK);
             }
             else
             {
-                Deployment.Current.Dispatcher.BeginInvoke(() =>
-                {
-                    transfer.StatusText = "Ошибка сети";
-                    transfer.IconColor = "#E81123";
-                    MessageBox.Show("Не удалось скачать файл полностью после " + maxRetries + " попыток.\nПоследняя ошибка: " + (lastError != null ? lastError.Message : "Неизвестно"), "Сбой", MessageBoxButton.OK);
-                });
+                transfer.StatusText = "Ошибка сети";
+                transfer.IconColor = "#E81123";
+                MessageBox.Show("Не удалось скачать файл полностью.\nПоследняя ошибка: " + (lastError != null ? lastError.Message : "Неизвестно"), "Сбой", MessageBoxButton.OK);
             }
         }
-        private void PropFindCompleted(IAsyncResult asynchronousResult)
+
+        private static bool TrySetRangeHeader(HttpWebRequest request, long from)
         {
             try
             {
-                HttpWebRequest request = (HttpWebRequest)asynchronousResult.AsyncState;
-                using (HttpWebResponse response = (HttpWebResponse)request.EndGetResponse(asynchronousResult))
-                {
-                    using (System.IO.StreamReader reader = new System.IO.StreamReader(response.GetResponseStream()))
-                    {
-                        string resultString = reader.ReadToEnd();
-                        Deployment.Current.Dispatcher.BeginInvoke(() =>
-                        {
-                            ParseWebDavResponse(resultString);
-                        });
-                    }
-                }
+                request.Headers["Range"] = "bytes=" + from + "-";
+                return true;
             }
-            catch (WebException webEx)
+            catch (Exception)
             {
-                if (webEx.Response != null)
-                {
-                    try
-                    {
-                        HttpWebResponse httpResponse = (HttpWebResponse)webEx.Response;
-                        int statusCode = (int)httpResponse.StatusCode;
-
-                        if (statusCode == 401)
-                        {
-                            Deployment.Current.Dispatcher.BeginInvoke(() => HandleUnauthorized());
-                            return;
-                        }
-
-                        using (var errorStream = httpResponse.GetResponseStream())
-                        using (var reader = new System.IO.StreamReader(errorStream))
-                        {
-                            string errorText = reader.ReadToEnd();
-                            Deployment.Current.Dispatcher.BeginInvoke(() =>
-                            {
-                                MessageBox.Show("Код ошибки сервера: " + statusCode + "\nТекст ответа: '" + errorText + "'",
-                                    "Детали от Яндекса", MessageBoxButton.OK);
-                            });
-                            return;
-                        }
-                    }
-                    catch { }
-                }
-                Deployment.Current.Dispatcher.BeginInvoke(() =>
-                {
-                    MessageBox.Show("Сетевой сбой:\n" + webEx.Message, "Упс!", MessageBoxButton.OK);
-                });
-            }
-            catch (Exception ex)
-            {
-                Deployment.Current.Dispatcher.BeginInvoke(() =>
-                {
-                    MessageBox.Show("Общая ошибка:\n" + ex.Message, "Упс!", MessageBoxButton.OK);
-                });
+                // На некоторых сборках Silverlight заголовок Range запрещён.
+                return false;
             }
         }
 
-        private void ParseWebDavResponse(string xmlContent)
+        private static string SanitizeFileName(string name)
         {
-            try
+            if (string.IsNullOrWhiteSpace(name))
             {
-                List<YandexFileItem> files = new List<YandexFileItem>();
-                string[] responses = xmlContent.Split(new string[] { "<d:response>" }, StringSplitOptions.RemoveEmptyEntries);
+                return "file";
+            }
 
-                for (int i = 1; i < responses.Length; i++)
+            char[] invalid = Path.GetInvalidFileNameChars();
+            StringBuilder builder = new StringBuilder(name.Length);
+
+            foreach (char c in name)
+            {
+                builder.Append(Array.IndexOf(invalid, c) >= 0 ? '_' : c);
+            }
+
+            string result = builder.ToString().Trim().TrimEnd('.');
+            if (result.Length == 0)
+            {
+                return "file";
+            }
+
+            if (result.Length > 100)
+            {
+                string extension = Path.GetExtension(result);
+                if (extension.Length > 10)
                 {
-                    string block = responses[i];
-                    string href = ExtractValue(block, "<d:href>", "</d:href>");
-                    string displayName = ExtractValue(block, "<d:displayname>", "</d:displayname>");
-
-                    if (string.IsNullOrEmpty(href) || string.IsNullOrEmpty(displayName)) continue;
-                    if (href.TrimEnd('/') == currentPath.TrimEnd('/')) continue;
-
-                    bool isFolder = block.Contains("<d:collection/>");
-                    string info;
-                    if (isFolder)
-                    {
-                        info = "Папка";
-                    }
-                    else
-                    {
-                        string lenStr = ExtractValue(block, "<d:getcontentlength>", "</d:getcontentlength>");
-                        long len = 0;
-                        if (!string.IsNullOrEmpty(lenStr)) long.TryParse(lenStr, out len);
-                        info = FormatSize(len);
-                    }
-
-                    files.Add(new YandexFileItem
-                    {
-                        Name = displayName,
-                        Info = info,
-                        Href = href,
-                        IsFolder = isFolder
-                    });
+                    extension = "";
                 }
 
-                if (currentPath != "/")
-                {
-                    files.Insert(0, new YandexFileItem
-                    {
-                        Name = "..",
-                        Info = "подняться на уровень вверх",
-                        Href = GetParentPath(currentPath),
-                        IsFolder = true
-                    });
-                }
-
-                FilesListBox.ItemsSource = files;
-
-                string pretty = Uri.UnescapeDataString(currentPath).Trim('/');
-                CurrentPathText.Text = pretty == ""
-                    ? "диск / (" + files.Count + " элементов)"
-                    : "диск / " + pretty + " (" + files.Count + " элементов)";
+                result = result.Substring(0, 100 - extension.Length) + extension;
             }
-            catch (Exception ex)
-            {
-                MessageBox.Show("Ошибка парсинга XML:\n" + ex.Message, "Сбой", MessageBoxButton.OK);
-            }
-        }
 
-        private string FormatSize(long bytes)
-        {
-            if (bytes < 1024) return bytes + " Б";
-            if (bytes < 1024 * 1024) return (bytes / 1024) + " КБ";
-            return (bytes / (1024.0 * 1024.0)).ToString("0.0") + " МБ";
+            return result;
         }
-
-        private string ExtractValue(string source, string startTag, string endTag)
-        {
-            int startIndex = source.IndexOf(startTag);
-            if (startIndex == -1) return null;
-            startIndex += startTag.Length;
-            int endIndex = source.IndexOf(endTag, startIndex);
-            if (endIndex == -1) return null;
-            return source.Substring(startIndex, endIndex - startIndex);
-        }
-    }
-
-    public class YandexFileItem
-    {
-        public string Name { get; set; }
-        public string Info { get; set; }
-        public string Href { get; set; }
-        public bool IsFolder { get; set; }
     }
 
     public class TransferItem : INotifyPropertyChanged
