@@ -1,0 +1,19 @@
+*.cs text eol=crlf
+*.xaml text eol=crlf
+*.csproj text eol=crlf
+*.sln text eol=crlf
+*.xml text eol=crlf
+*.appxmanifest text eol=crlf
+*.manifest text eol=crlf
+*.config text eol=crlf
+*.resx text eol=crlf
+*.md text eol=crlf
+
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.ttf binary
+*.dll binary
+*.nupkg binary
+*.xap binary
+*.suo binary

@@ -1,0 +1,28 @@
+# Build output
+Bin/
+bin/
+obj/
+Obj/
+
+# NuGet restore output (project has no NuGet dependencies)
+packages/
+*.xap
+*.appx
+*.appxupload
+*.appxrecipe
+*.build.appxrecipe
+
+# Visual Studio user files
+*.suo
+*.user
+.vs/
+
+# Certificates and secrets
+*.pfx
+*.pvk
+Secrets.cs
+
+# OS / editor junk
+.DS_Store
+Thumbs.db
+*.tmp
