@@ -1,6 +1,9 @@
 ﻿using System;
 using System.Diagnostics;
+using System.IO;
+using System.IO.IsolatedStorage;
 using System.Resources;
+using System.Text;
 using System.Windows;
 using System.Windows.Markup;
 using System.Windows.Navigation;
@@ -66,29 +69,35 @@ namespace LumiaYD
         // This code will not execute when the application is reactivated
         private void Application_Launching(object sender, LaunchingEventArgs e)
         {
+            Log("app launch");
         }
 
         // Code to execute when the application is activated (brought to foreground)
         // This code will not execute when the application is first launched
         private void Application_Activated(object sender, ActivatedEventArgs e)
         {
+            Log("app activated");
         }
 
         // Code to execute when the application is deactivated (sent to background)
         // This code will not execute when the application is closing
         private void Application_Deactivated(object sender, DeactivatedEventArgs e)
         {
+            Log("app deactivated");
         }
 
         // Code to execute when the application is closing (eg, user hit Back)
         // This code will not execute when the application is deactivated
         private void Application_Closing(object sender, ClosingEventArgs e)
         {
+            Log("app closing");
         }
 
         // Code to execute if a navigation fails
         private void RootFrame_NavigationFailed(object sender, NavigationFailedEventArgs e)
         {
+            Log("navigation failed: " + e.Uri + " " + e.Exception);
+
             if (Debugger.IsAttached)
             {
                 // A navigation has failed; break into the debugger
@@ -99,6 +108,8 @@ namespace LumiaYD
         // Code to execute on Unhandled Exceptions
         private void Application_UnhandledException(object sender, ApplicationUnhandledExceptionEventArgs e)
         {
+            Log("UNHANDLED: " + e.ExceptionObject);
+
             if (Debugger.IsAttached)
             {
                 // An unhandled exception has occurred; break into the debugger
@@ -217,6 +228,55 @@ namespace LumiaYD
             if (fileSaveArgs != null)
             {
                 this.FileSaveContinuationArgs = fileSaveArgs;
+            }
+        }
+
+        private const string DiagnosticsFileName = "diagnostics.log";
+
+        public static void Log(string message)
+        {
+            try
+            {
+                using (var store = IsolatedStorageFile.GetUserStoreForApplication())
+                using (var stream = new IsolatedStorageFileStream(
+                    DiagnosticsFileName, FileMode.Append, FileAccess.Write, store))
+                using (var writer = new StreamWriter(stream))
+                {
+                    writer.WriteLine(DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + " " + message);
+                }
+            }
+            catch
+            {
+            }
+        }
+
+        public static string ReadDiagnosticsTail(int maxChars)
+        {
+            try
+            {
+                using (var store = IsolatedStorageFile.GetUserStoreForApplication())
+                {
+                    if (!store.FileExists(DiagnosticsFileName))
+                    {
+                        return "";
+                    }
+
+                    using (var stream = store.OpenFile(DiagnosticsFileName, FileMode.Open, FileAccess.Read))
+                    using (var reader = new StreamReader(stream))
+                    {
+                        string text = reader.ReadToEnd();
+                        if (text.Length <= maxChars)
+                        {
+                            return text;
+                        }
+
+                        return text.Substring(text.Length - maxChars);
+                    }
+                }
+            }
+            catch
+            {
+                return "";
             }
         }
     }

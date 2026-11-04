@@ -27,6 +27,8 @@ namespace LumiaYD
         private const string CurrentPathKey = "CurrentPath";
         private const string PendingDownloadNameKey = "PendingDownloadName";
         private const string PendingDownloadHrefKey = "PendingDownloadHref";
+        private const long DownloadChunkSize = 8L * 1024 * 1024;
+        private const int DownloadMaxAttempts = 5;
 
         private string _login;
         private string _password;
@@ -38,6 +40,7 @@ namespace LumiaYD
         private readonly ObservableCollection<TransferItem> _transfers = new ObservableCollection<TransferItem>();
 
         private YandexWebDavClient _webDav;
+        private int _activeDownloads;
         private int _folderRequestId;
         private CancellationTokenSource _folderCancellation;
         private CancellationTokenSource _quotaCancellation;
@@ -83,6 +86,7 @@ namespace LumiaYD
             base.OnNavigatedTo(e);
 
             SystemTray.IsVisible = false;
+            LoadDiagnostics();
 
             if (!_initialized)
             {
@@ -105,6 +109,22 @@ namespace LumiaYD
                     _pendingDownloadFile = null;
                     ClearPendingDownload();
                 }
+            }
+        }
+
+        private void LoadDiagnostics()
+        {
+            string text = App.ReadDiagnosticsTail(1200);
+            DiagnosticsText.Text = string.IsNullOrEmpty(text.Trim())
+                ? "Записей нет."
+                : text;
+        }
+
+        private void MainPivot_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (MainPivot.SelectedIndex == 2)
+            {
+                LoadDiagnostics();
             }
         }
 
@@ -694,15 +714,6 @@ namespace LumiaYD
 
         private async void StartDownloadToStorageFile(YandexFileItem file, StorageFile targetFile, TransferItem transfer)
         {
-            const int maxRetries = 5;
-            int attempt = 0;
-            long totalBytesRead = 0;
-            long totalBytes = 0;
-            bool isCompleted = false;
-            bool shouldRetry = true;
-            Exception lastError = null;
-            int lastProgress = -1;
-
             var client = _webDav;
             if (client == null)
             {
@@ -711,164 +722,361 @@ namespace LumiaYD
                 return;
             }
 
-            while (attempt < maxRetries && !isCompleted)
-            {
-                attempt++;
-                lastError = null;
+            long totalBytes = -1;
+            long downloadedBytes = 0;
+            int lastProgress = -1;
+            bool isCompleted = false;
+            Exception lastError = null;
 
+            BeginDownloadActivity();
+            App.Log("download start: " + file.Name);
+
+            try
+            {
                 try
                 {
-                    var request = client.CreateDownloadRequest(file.Href);
-
-                    if (totalBytesRead > 0)
+                    totalBytes = await GetRemoteFileSizeAsync(client, file.Href);
+                    if (totalBytes > 0)
                     {
-                        if (TrySetRangeHeader(request, totalBytesRead))
-                        {
-                            transfer.StatusText = "Восстановление связи...";
-                        }
-                        else
-                        {
-                            // Range не поддерживается — скачиваем файл заново.
-                            totalBytesRead = 0;
-                            totalBytes = 0;
-                            lastProgress = -1;
-                        }
+                        App.Log("download size: " + totalBytes);
                     }
-
-                    var response = await Task.Factory.FromAsync<WebResponse>(
-                        request.BeginGetResponse, request.EndGetResponse, null);
-
-                    using (var httpResponse = (HttpWebResponse)response)
+                    else if (totalBytes == 0)
                     {
-                        int statusCode = (int)httpResponse.StatusCode;
-                        long contentLength = httpResponse.ContentLength;
-
-                        if (totalBytesRead > 0 && statusCode == 200)
-                        {
-                            // Сервер проигнорировал Range — начинаем файл заново.
-                            totalBytesRead = 0;
-                            totalBytes = contentLength;
-                            lastProgress = -1;
-                        }
-                        else if (statusCode == 206)
-                        {
-                            // 206 — сервер вернул только остаток файла.
-                            if (contentLength > 0)
-                            {
-                                totalBytes = totalBytesRead + contentLength;
-                            }
-                        }
-                        else
-                        {
-                            totalBytes = contentLength;
-                        }
-
-                        using (Stream responseStream = httpResponse.GetResponseStream())
-                        using (var fileStream = await targetFile.OpenStreamForWriteAsync())
-                        {
-                            if (totalBytesRead == 0)
-                            {
-                                fileStream.SetLength(0);
-                            }
-                            else
-                            {
-                                fileStream.Seek(totalBytesRead, SeekOrigin.Begin);
-                            }
-
-                            byte[] buffer = new byte[16384];
-                            int read;
-
-                            while ((read = await responseStream.ReadAsync(buffer, 0, buffer.Length)) > 0)
-                            {
-                                await fileStream.WriteAsync(buffer, 0, read);
-                                totalBytesRead += read;
-
-                                if (totalBytes > 0)
-                                {
-                                    int progress = (int)((totalBytesRead * 100) / totalBytes);
-                                    if (progress != lastProgress)
-                                    {
-                                        lastProgress = progress;
-                                        int capturedProgress = progress;
-                                        Deployment.Current.Dispatcher.BeginInvoke(() => transfer.Progress = capturedProgress);
-                                    }
-                                }
-                            }
-
-                            await fileStream.FlushAsync();
-                        }
-                    }
-
-                    if (totalBytes > 0 && totalBytesRead < totalBytes)
-                    {
-                        throw new IOException("Соединение оборвалось. Скачано " + totalBytesRead + " из " + totalBytes + " байт.");
-                    }
-
-                    isCompleted = true;
-                }
-                catch (WebException ex)
-                {
-                    lastError = ex;
-
-                    var errorResponse = ex.Response as HttpWebResponse;
-                    if (errorResponse != null)
-                    {
-                        int errorStatus = (int)errorResponse.StatusCode;
-                        if (errorStatus == 401 || errorStatus == 403)
-                        {
-                            // Нет смысла повторять: логин/пароль больше не подходят.
-                            shouldRetry = false;
-                        }
-                        else if (errorStatus == 416)
-                        {
-                            // Range не принят. Если файл уже скачан целиком — это успех,
-                            // иначе начинаем заново с нуля.
-                            if (totalBytes > 0 && totalBytesRead >= totalBytes)
-                            {
-                                isCompleted = true;
-                            }
-                            else
-                            {
-                                totalBytesRead = 0;
-                                totalBytes = 0;
-                                lastProgress = -1;
-                            }
-                        }
-
-                        errorResponse.Dispose();
+                        isCompleted = true;
                     }
                 }
                 catch (Exception ex)
                 {
-                    lastError = ex;
+                    // HEAD может быть запрещён — размер возьмём из первого 206-ответа.
+                    App.Log("download HEAD failed: " + ex.Message);
                 }
 
-                if (!isCompleted && shouldRetry && attempt < maxRetries)
+                using (var fileStream = await targetFile.OpenStreamForWriteAsync())
                 {
-                    transfer.StatusText = "Обрыв. Попытка " + (attempt + 1) + " из " + maxRetries + "...";
-                    await Task.Delay(2000);
+                    fileStream.SetLength(0);
+                    await fileStream.FlushAsync();
+                }
+
+                while (!isCompleted)
+                {
+                    bool chunkDone = false;
+                    Exception chunkError = null;
+                    bool stopRetry = false;
+
+                    for (int attempt = 1; attempt <= DownloadMaxAttempts && !chunkDone && !stopRetry; attempt++)
+                    {
+                        HttpWebResponse response = null;
+
+                        try
+                        {
+                            // Начинаем каждый раз с текущей позиции: если предыдущая
+                            // попытка успела записать часть данных, она не потеряется.
+                            long chunkStart = downloadedBytes;
+                            long chunkEnd = chunkStart + DownloadChunkSize - 1;
+
+                            if (totalBytes > 0 && chunkEnd >= totalBytes)
+                            {
+                                chunkEnd = totalBytes - 1;
+                            }
+
+                            HttpWebRequest request = client.CreateDownloadRequest(file.Href);
+
+                            if (!TrySetRangeHeader(request, chunkStart, chunkEnd))
+                            {
+                                stopRetry = true;
+                                throw new NotSupportedException(
+                                    "Этот телефон не позволяет скачивать файл по частям.");
+                            }
+
+                            response = (HttpWebResponse)await Task.Factory.FromAsync<WebResponse>(
+                                request.BeginGetResponse, request.EndGetResponse, null);
+
+                            int status = (int)response.StatusCode;
+
+                            if (status == 401 || status == 403)
+                            {
+                                stopRetry = true;
+                                throw new IOException(status == 401
+                                    ? "Пароль не подошёл или сессия истекла."
+                                    : "Нет прав на скачивание файла.");
+                            }
+
+                            if (status == 206)
+                            {
+                                if (totalBytes <= 0)
+                                {
+                                    totalBytes = ParseTotalBytes(response.Headers["Content-Range"]);
+                                }
+                            }
+                            else if (status == 200)
+                            {
+                                // Сервер проигнорировал Range. Для маленького файла
+                                // это допустимо, для большого — нет.
+                                if (chunkStart == 0 && response.ContentLength > 0 &&
+                                    response.ContentLength <= DownloadChunkSize * 2)
+                                {
+                                    totalBytes = response.ContentLength;
+                                }
+                                else
+                                {
+                                    stopRetry = true;
+                                    throw new NotSupportedException(
+                                        "Сервер не поддерживает докачку, а файл слишком большой для одного запроса.");
+                                }
+                            }
+                            else if (status == 416)
+                            {
+                                // 416 после уже скачанных байт означает, что файл кончился.
+                                if (downloadedBytes > 0 && (totalBytes <= 0 || downloadedBytes >= totalBytes))
+                                {
+                                    isCompleted = true;
+                                    chunkDone = true;
+                                    break;
+                                }
+
+                                stopRetry = true;
+                                throw new IOException("Сервер отклонил диапазон докачки.");
+                            }
+                            else
+                            {
+                                throw new IOException("HTTP " + status);
+                            }
+
+                            long expectedBytes = response.ContentLength;
+                            long chunkRead = 0;
+
+                            using (Stream responseStream = response.GetResponseStream())
+                            using (var fileStream = await targetFile.OpenStreamForWriteAsync())
+                            {
+                                fileStream.Seek(downloadedBytes, SeekOrigin.Begin);
+
+                                byte[] buffer = new byte[65536];
+                                int read;
+
+                                while ((read = await responseStream.ReadAsync(buffer, 0, buffer.Length)) > 0)
+                                {
+                                    await fileStream.WriteAsync(buffer, 0, read);
+                                    downloadedBytes += read;
+                                    chunkRead += read;
+
+                                    ReportDownloadProgress(transfer, downloadedBytes, totalBytes, ref lastProgress);
+                                }
+
+                                await fileStream.FlushAsync();
+                            }
+
+                            if (expectedBytes > 0 && chunkRead < expectedBytes)
+                            {
+                                throw new IOException("Пришла только часть данных.");
+                            }
+
+                            if (chunkRead == 0)
+                            {
+                                throw new IOException("Сервер вернул пустой ответ.");
+                            }
+
+                            chunkDone = true;
+                        }
+                        catch (WebException ex)
+                        {
+                            chunkError = ex;
+
+                            var errorResponse = ex.Response as HttpWebResponse;
+                            if (errorResponse != null)
+                            {
+                                int errorStatus = (int)errorResponse.StatusCode;
+                                errorResponse.Dispose();
+
+                                if (errorStatus == 401 || errorStatus == 403)
+                                {
+                                    stopRetry = true;
+                                }
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            chunkError = ex;
+                        }
+                        finally
+                        {
+                            if (response != null)
+                            {
+                                response.Dispose();
+                            }
+                        }
+
+                        if (!chunkDone && !stopRetry && attempt < DownloadMaxAttempts)
+                        {
+                            transfer.StatusText = "Обрыв. Попытка " + (attempt + 1) + " из " + DownloadMaxAttempts;
+                            App.Log("download retry " + file.Name + " at " + downloadedBytes +
+                                ": " + (chunkError != null ? chunkError.Message : "?"));
+                            await Task.Delay(2000);
+                        }
+                    }
+
+                    if (!chunkDone)
+                    {
+                        lastError = chunkError;
+                        break;
+                    }
+
+                    if (totalBytes > 0)
+                    {
+                        if (downloadedBytes >= totalBytes)
+                        {
+                            isCompleted = true;
+                        }
+                    }
+                    else if (downloadedBytes <= 0)
+                    {
+                        lastError = new IOException("Сервер не сообщил размер файла.");
+                        break;
+                    }
+                }
+
+                if (isCompleted)
+                {
+                    transfer.StatusText = "Готово";
+                    transfer.Progress = 100;
+                    App.Log("download done: " + file.Name + " (" + downloadedBytes + " bytes)");
+                    MessageBox.Show("Файл сохранён в выбранную папку!\nТеперь он виден через USB.", "Успех", MessageBoxButton.OK);
+                }
+                else
+                {
+                    transfer.StatusText = "Ошибка сети";
+                    transfer.IconColor = "#E81123";
+                    App.Log("download failed: " + file.Name + " at " + downloadedBytes + " / " + totalBytes +
+                        ": " + (lastError != null ? lastError.Message : "?"));
+                    MessageBox.Show("Не удалось скачать файл полностью.\nПоследняя ошибка: " +
+                        (lastError != null ? lastError.Message : "Неизвестно"), "Сбой", MessageBoxButton.OK);
                 }
             }
-
-            if (isCompleted)
+            catch (Exception ex)
             {
-                transfer.StatusText = "Готово";
-                transfer.Progress = 100;
-                MessageBox.Show("Файл сохранён в выбранную папку!\nТеперь он виден через USB.", "Успех", MessageBoxButton.OK);
-            }
-            else
-            {
-                transfer.StatusText = "Ошибка сети";
+                transfer.StatusText = "Ошибка";
                 transfer.IconColor = "#E81123";
-                MessageBox.Show("Не удалось скачать файл полностью.\nПоследняя ошибка: " + (lastError != null ? lastError.Message : "Неизвестно"), "Сбой", MessageBoxButton.OK);
+                App.Log("download exception: " + ex);
+                MessageBox.Show("Не удалось скачать файл:\n" + ex.Message, "Сбой", MessageBoxButton.OK);
+            }
+            finally
+            {
+                EndDownloadActivity();
             }
         }
 
-        private static bool TrySetRangeHeader(HttpWebRequest request, long from)
+        private static async Task<long> GetRemoteFileSizeAsync(YandexWebDavClient client, string href)
+        {
+            HttpWebRequest request = client.CreateDownloadRequest(href);
+            request.Method = "HEAD";
+
+            using (WebResponse response = await Task.Factory.FromAsync<WebResponse>(
+                request.BeginGetResponse, request.EndGetResponse, null))
+            {
+                return response.ContentLength;
+            }
+        }
+
+        private static long ParseTotalBytes(string contentRange)
+        {
+            if (string.IsNullOrEmpty(contentRange))
+            {
+                return -1;
+            }
+
+            int slash = contentRange.LastIndexOf('/');
+            if (slash < 0)
+            {
+                return -1;
+            }
+
+            long total;
+            if (long.TryParse(contentRange.Substring(slash + 1).Trim(), out total))
+            {
+                return total;
+            }
+
+            return -1;
+        }
+
+        private void ReportDownloadProgress(TransferItem transfer, long downloaded, long total, ref int lastProgress)
+        {
+            if (total <= 0)
+            {
+                return;
+            }
+
+            int progress = (int)((downloaded * 100) / total);
+            if (progress == lastProgress)
+            {
+                return;
+            }
+
+            lastProgress = progress;
+            int capturedProgress = progress;
+            Deployment.Current.Dispatcher.BeginInvoke(() => transfer.Progress = capturedProgress);
+
+            if (progress % 10 == 0)
+            {
+                App.Log("download " + transfer.FileName + ": " + progress + "% (" + downloaded + " bytes)");
+            }
+        }
+
+        private void BeginDownloadActivity()
+        {
+            if (_activeDownloads == 0)
+            {
+                try
+                {
+                    PhoneApplicationService.Current.UserIdleDetectionMode = IdleDetectionMode.Disabled;
+                }
+                catch
+                {
+                }
+
+                try
+                {
+                    PhoneApplicationService.Current.ApplicationIdleDetectionMode = IdleDetectionMode.Disabled;
+                }
+                catch
+                {
+                }
+            }
+
+            _activeDownloads++;
+        }
+
+        private void EndDownloadActivity()
+        {
+            if (_activeDownloads > 0)
+            {
+                _activeDownloads--;
+            }
+
+            if (_activeDownloads == 0)
+            {
+                try
+                {
+                    PhoneApplicationService.Current.UserIdleDetectionMode = IdleDetectionMode.Enabled;
+                }
+                catch
+                {
+                }
+
+                try
+                {
+                    PhoneApplicationService.Current.ApplicationIdleDetectionMode = IdleDetectionMode.Enabled;
+                }
+                catch
+                {
+                }
+            }
+        }
+
+        private static bool TrySetRangeHeader(HttpWebRequest request, long from, long to)
         {
             try
             {
-                request.Headers["Range"] = "bytes=" + from + "-";
+                request.Headers["Range"] = "bytes=" + from + "-" + to;
                 return true;
             }
             catch (Exception)

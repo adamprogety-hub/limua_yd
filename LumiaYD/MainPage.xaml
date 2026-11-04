@@ -16,7 +16,7 @@ shell:SystemTray.IsVisible="True">
     <Grid x:Name="LayoutRoot" Background="Black">
 
         <!-- ГЛАВНЫЙ ЭКРАН -->
-        <phone:Pivot x:Name="MainPivot" Title="ЯНДЕКС ДИСК" Visibility="Collapsed" Foreground="White">
+        <phone:Pivot x:Name="MainPivot" Title="ЯНДЕКС ДИСК" Visibility="Collapsed" Foreground="White" SelectionChanged="MainPivot_SelectionChanged">
 
             <!-- ВКЛАДКА 1: ОБЛАКО -->
             <phone:PivotItem Header="облако">
@@ -90,15 +90,21 @@ shell:SystemTray.IsVisible="True">
 
             <!-- ВКЛАДКА 3: ИНФО -->
             <phone:PivotItem Header="инфо">
-                <StackPanel Margin="24,20,24,0">
-                    <TextBlock Text="ТЕКУЩИЙ АККАУНТ" Foreground="#666666" FontSize="14" FontFamily="Segoe UI Semibold"/>
-                    <TextBlock x:Name="CurrentAccountText" Text="Не указан" FontSize="24" Foreground="White" Margin="0,8,0,32" FontFamily="Segoe UI Semilight"/>
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Margin="24,20,24,32">
+                        <TextBlock Text="ТЕКУЩИЙ АККАУНТ" Foreground="#666666" FontSize="14" FontFamily="Segoe UI Semibold"/>
+                        <TextBlock x:Name="CurrentAccountText" Text="Не указан" FontSize="24" Foreground="White" Margin="0,8,0,32" FontFamily="Segoe UI Semilight"/>
 
-                    <TextBlock Text="ХРАНИЛИЩЕ" Foreground="#666666" FontSize="14" FontFamily="Segoe UI Semibold"/>
-                    <TextBlock x:Name="StorageText" Text="Загрузка..." FontSize="24" Foreground="White" Margin="0,8,0,32" FontFamily="Segoe UI Semilight"/>
+                        <TextBlock Text="ХРАНИЛИЩЕ" Foreground="#666666" FontSize="14" FontFamily="Segoe UI Semibold"/>
+                        <TextBlock x:Name="StorageText" Text="Загрузка..." FontSize="24" Foreground="White" Margin="0,8,0,32" FontFamily="Segoe UI Semilight"/>
 
-                    <Button x:Name="LogoutButton" Content="ВЫЙТИ" Click="LogoutButton_Click" HorizontalAlignment="Left" Background="#1F1F1F" Foreground="#E81123" BorderBrush="#333333" FontFamily="Segoe UI Semibold"/>
-                </StackPanel>
+                        <TextBlock Text="ПОСЛЕДНИЕ СОБЫТИЯ" Foreground="#666666" FontSize="14" FontFamily="Segoe UI Semibold"/>
+                        <TextBlock x:Name="DiagnosticsText" Text="Записей нет." FontSize="11" Foreground="#999999"
+                                   TextWrapping="Wrap" Margin="0,8,0,32"/>
+
+                        <Button x:Name="LogoutButton" Content="ВЫЙТИ" Click="LogoutButton_Click" HorizontalAlignment="Left" Background="#1F1F1F" Foreground="#E81123" BorderBrush="#333333" FontFamily="Segoe UI Semibold"/>
+                    </StackPanel>
+                </ScrollViewer>
             </phone:PivotItem>
         </phone:Pivot>
 
