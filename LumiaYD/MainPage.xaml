@@ -92,17 +92,27 @@ shell:SystemTray.IsVisible="True">
             <phone:PivotItem Header="инфо">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                     <StackPanel Margin="24,20,24,32">
-                        <TextBlock Text="ТЕКУЩИЙ АККАУНТ" Foreground="#666666" FontSize="14" FontFamily="Segoe UI Semibold"/>
-                        <TextBlock x:Name="CurrentAccountText" Text="Не указан" FontSize="24" Foreground="White" Margin="0,8,0,32" FontFamily="Segoe UI Semilight"/>
+                        <Border Background="Transparent" Tap="AccountBlock_Tap" Margin="0,0,0,32">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel>
+                                    <TextBlock Text="ТЕКУЩИЙ АККАУНТ" Foreground="#666666" FontSize="14" FontFamily="Segoe UI Semibold"/>
+                                    <TextBlock x:Name="CurrentAccountText" Text="Не указан" FontSize="24" Foreground="White" Margin="0,8,0,0" FontFamily="Segoe UI Semilight" TextTrimming="WordEllipsis"/>
+                                </StackPanel>
+                                <TextBlock Grid.Column="1" Text="&#xE13A;" FontFamily="{StaticResource PhosphorFont}" FontSize="22"
+                                           Foreground="#666666" VerticalAlignment="Center" Margin="12,0,0,0"/>
+                            </Grid>
+                        </Border>
 
                         <TextBlock Text="ХРАНИЛИЩЕ" Foreground="#666666" FontSize="14" FontFamily="Segoe UI Semibold"/>
                         <TextBlock x:Name="StorageText" Text="Загрузка..." FontSize="24" Foreground="White" Margin="0,8,0,32" FontFamily="Segoe UI Semilight"/>
 
                         <TextBlock Text="ПОСЛЕДНИЕ СОБЫТИЯ" Foreground="#666666" FontSize="14" FontFamily="Segoe UI Semibold"/>
                         <TextBlock x:Name="DiagnosticsText" Text="Записей нет." FontSize="11" Foreground="#999999"
-                                   TextWrapping="Wrap" Margin="0,8,0,32"/>
-
-                        <Button x:Name="LogoutButton" Content="ВЫЙТИ" Click="LogoutButton_Click" HorizontalAlignment="Left" Background="#1F1F1F" Foreground="#E81123" BorderBrush="#333333" FontFamily="Segoe UI Semibold"/>
+                                   TextWrapping="Wrap" Margin="0,8,0,0"/>
                     </StackPanel>
                 </ScrollViewer>
             </phone:PivotItem>
@@ -164,6 +174,114 @@ shell:SystemTray.IsVisible="True">
                 <TextBlock x:Name="StatusText" Text="ВВЕДИТЕ ЛОГИН И ПАРОЛЬ ПРИЛОЖЕНИЯ" Foreground="#999999" FontSize="14" HorizontalAlignment="Center" TextWrapping="Wrap" Margin="0,16,0,0" FontFamily="Segoe UI"/>
                 <TextBlock Text="Пароль приложения создаётся в Яндекс ID → Безопасность → Пароли приложений. Обычный пароль от аккаунта не подойдёт." Foreground="#666666" FontSize="12" TextWrapping="Wrap" Margin="0,24,0,0" FontFamily="Segoe UI"/>
             </StackPanel>
+        </Grid>
+
+        <!-- МОДАЛЬНЫЙ СЛОЙ: МЕНЮ АККАУНТА И КАРТОЧКА ПОДТВЕРЖДЕНИЯ -->
+        <Grid x:Name="ModalOverlay" Canvas.ZIndex="200" Visibility="Collapsed">
+            <Border x:Name="ModalBackdrop" Background="#B3000000" Tap="ModalOverlay_Tap"/>
+            <Border x:Name="AccountMenuCard" Style="{StaticResource NothingSheetCard}"
+                    VerticalAlignment="Bottom" Margin="16,0,16,24" Tap="AccountMenuCard_Tap">
+                <Border.RenderTransform>
+                    <TranslateTransform X="0" Y="24"/>
+                </Border.RenderTransform>
+
+                <StackPanel>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel VerticalAlignment="Center">
+                            <TextBlock Text="АККАУНТ" Style="{StaticResource NothingSheetCaption}"/>
+                            <TextBlock x:Name="AccountMenuLogin" Text="Не указан" Style="{StaticResource NothingSheetTitle}"
+                                       FontSize="22" Margin="0,4,0,0" TextTrimming="WordEllipsis"/>
+                            <TextBlock Text="Яндекс.Диск · WebDAV" Style="{StaticResource NothingRowCaption}" Margin="0,2,0,0"/>
+                        </StackPanel>
+
+                        <Button Grid.Column="1" Style="{StaticResource NothingCloseButton}"
+                                Click="AccountMenuClose_Click" VerticalAlignment="Top">
+                            <TextBlock Text="&#xE4F6;" FontFamily="{StaticResource PhosphorFont}" FontSize="20"
+                                       Foreground="{StaticResource NothingInkBrush}"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Button>
+                    </Grid>
+
+                    <TextBlock Text="ХРАНИЛИЩЕ" Style="{StaticResource NothingSheetCaption}" Margin="0,24,0,0"/>
+                    <Border x:Name="AccountStorageTrack" Height="4" CornerRadius="2" Background="#E4E4E1"
+                            Margin="0,12,0,8" SizeChanged="AccountStorageTrack_SizeChanged">
+                        <Border x:Name="AccountStorageFill" Background="{StaticResource NothingInkBrush}"
+                                CornerRadius="2" HorizontalAlignment="Left" Width="0"/>
+                    </Border>
+                    <TextBlock x:Name="AccountStorageText" Text="Загрузка..." Style="{StaticResource NothingRowCaption}"/>
+
+                    <Border Height="1" Background="{StaticResource NothingBorderLightBrush}" Margin="0,20,0,12"/>
+
+                    <Button Style="{StaticResource NothingRowButton}" Click="AccountMenuRefresh_Click">
+                        <Grid Height="56">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="44"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <Border Width="40" Height="40" CornerRadius="20" Background="#F0F0EE" VerticalAlignment="Center">
+                                <TextBlock Text="&#xE094;" FontFamily="{StaticResource PhosphorFont}" FontSize="20"
+                                           Foreground="{StaticResource NothingInkBrush}"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="14,0,0,0">
+                                <TextBlock Text="Обновить данные" Style="{StaticResource NothingRowTitle}"/>
+                                <TextBlock Text="Папка и занятое место" Style="{StaticResource NothingRowCaption}" Margin="0,2,0,0"/>
+                            </StackPanel>
+                            <TextBlock Grid.Column="2" Text="&#xE13A;" FontFamily="{StaticResource PhosphorFont}"
+                                       FontSize="18" Foreground="#9A9A9A" VerticalAlignment="Center"/>
+                        </Grid>
+                    </Button>
+
+                    <Button Style="{StaticResource NothingRowButton}" Click="AccountMenuLogout_Click" Margin="0,4,0,0">
+                        <Grid Height="56">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="44"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <Border Width="40" Height="40" CornerRadius="20" Background="{StaticResource NothingRedSoftBrush}" VerticalAlignment="Center">
+                                <TextBlock Text="&#xE42A;" FontFamily="{StaticResource PhosphorFont}" FontSize="20"
+                                           Foreground="{StaticResource NothingRedBrush}"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="14,0,0,0">
+                                <TextBlock Text="Выйти" Style="{StaticResource NothingRowTitle}"
+                                           Foreground="{StaticResource NothingRedBrush}"/>
+                                <TextBlock Text="Отключить аккаунт на устройстве" Style="{StaticResource NothingRowCaption}" Margin="0,2,0,0"/>
+                            </StackPanel>
+                            <TextBlock Grid.Column="2" Text="&#xE13A;" FontFamily="{StaticResource PhosphorFont}"
+                                       FontSize="18" Foreground="{StaticResource NothingRedBrush}" VerticalAlignment="Center"/>
+                        </Grid>
+                    </Button>
+                </StackPanel>
+            </Border>
+
+            <!-- КАРТОЧКА ПОДТВЕРЖДЕНИЯ: ТО ЖЕ МЕСТО, ЧТО У МЕНЮ АККАУНТА -->
+            <Border x:Name="NothingDialogCard" Style="{StaticResource NothingSheetCard}"
+                    VerticalAlignment="Bottom" Margin="16,0,16,24" Tap="NothingDialogCard_Tap"
+                    Visibility="Collapsed">
+                <Border.RenderTransform>
+                    <TranslateTransform X="480"/>
+                </Border.RenderTransform>
+
+                <StackPanel>
+                    <TextBlock x:Name="NothingDialogTitle" Style="{StaticResource NothingDialogTitle}"/>
+                    <TextBlock x:Name="NothingDialogMessage" Style="{StaticResource NothingDialogBody}" Margin="0,10,0,0"/>
+
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,24,0,0">
+                        <Button x:Name="NothingDialogSecondaryButton" Style="{StaticResource NothingSecondaryButton}"
+                                Click="NothingDialogSecondary_Click" Margin="0,0,8,0"/>
+                        <Button x:Name="NothingDialogPrimaryButton" Style="{StaticResource NothingPrimaryButton}"
+                                Click="NothingDialogPrimary_Click"/>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
         </Grid>
     </Grid>
 </phone:PhoneApplicationPage>

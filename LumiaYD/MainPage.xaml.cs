@@ -2,6 +2,8 @@
 using System.Windows;
 using System.Windows.Navigation;
 using System.Windows.Controls;
+using System.Windows.Media;
+using System.Windows.Media.Animation;
 using Microsoft.Phone.Controls;
 using Microsoft.Phone.Shell;
 using System.IO.IsolatedStorage;
@@ -40,10 +42,19 @@ namespace LumiaYD
         private readonly ObservableCollection<TransferItem> _transfers = new ObservableCollection<TransferItem>();
 
         private YandexWebDavClient _webDav;
+        private QuotaInfo _quota;
+        private bool _quotaFailed;
+        private double _storagePercent;
         private int _activeDownloads;
         private int _folderRequestId;
         private CancellationTokenSource _folderCancellation;
         private CancellationTokenSource _quotaCancellation;
+        private bool _accountMenuOpen;
+        private bool _dialogOpen;
+        private bool _dialogInsideAccountMenu;
+        private bool _suppressBackdropTap;
+        private Action _dialogPrimaryAction;
+        private Action _dialogSecondaryAction;
 
         public MainPage()
         {
@@ -62,6 +73,20 @@ namespace LumiaYD
 
         private void MainPage_BackKeyPress(object sender, System.ComponentModel.CancelEventArgs e)
         {
+            if (_dialogOpen)
+            {
+                e.Cancel = true;
+                HideNothingDialog(false);
+                return;
+            }
+
+            if (_accountMenuOpen)
+            {
+                e.Cancel = true;
+                HideAccountMenu();
+                return;
+            }
+
             if (AuthArea.Visibility == Visibility.Visible)
             {
                 return;
@@ -197,7 +222,7 @@ namespace LumiaYD
             MainPivot.Visibility = Visibility.Collapsed;
             BottomActionPanel.Visibility = Visibility.Collapsed;
             LoginTextBox.Text = _login ?? "";
-            PasswordBox.Password = "";
+            PasswordBox.Password = _password ?? "";
             StatusText.Text = "ВВЕДИТЕ ЛОГИН И ПАРОЛЬ ПРИЛОЖЕНИЯ";
             AuthProgress.Visibility = Visibility.Collapsed;
             LoginButton.IsEnabled = true;
@@ -285,7 +310,11 @@ namespace LumiaYD
 
         private void HandleUnauthorized()
         {
+            CloseOverlaysImmediate();
             ClearCredentials();
+            _quota = null;
+            _quotaFailed = false;
+            UpdateAccountMenu();
             _pendingDownloadFile = null;
             ClearPendingDownload();
             _transfers.Clear();
@@ -295,8 +324,430 @@ namespace LumiaYD
             StatusText.Text = "ПАРОЛЬ НЕ ПОДОШЁЛ ИЛИ СЕССИЯ ИСТЕКЛА. ВОЙДИТЕ СНОВА.";
         }
 
-        private void LogoutButton_Click(object sender, RoutedEventArgs e)
+        private void AccountBlock_Tap(object sender, System.Windows.Input.GestureEventArgs e)
         {
+            ShowAccountMenu();
+        }
+
+        private void ShowAccountMenu()
+        {
+            if (_accountMenuOpen || _dialogOpen)
+            {
+                return;
+            }
+
+            _accountMenuOpen = true;
+            SetModalBackgroundLocked(true);
+            UpdateAccountMenu();
+
+            if (_quota == null && _webDav != null)
+            {
+                LoadQuotaAsync();
+            }
+
+            NothingDialogCard.Visibility = Visibility.Collapsed;
+            AccountMenuCard.Visibility = Visibility.Visible;
+            AccountMenuCard.IsHitTestVisible = true;
+            SetTranslate(AccountMenuCard, 0, 24);
+
+            ModalOverlay.Opacity = 0;
+            ModalOverlay.Visibility = Visibility.Visible;
+
+            Storyboard storyboard = new Storyboard();
+            AddOpacityAnimation(storyboard, ModalOverlay, 0, 1, 160);
+            AddTranslateYAnimation(storyboard, AccountMenuCard, 0, 200);
+            storyboard.Begin();
+        }
+
+        private void HideAccountMenu()
+        {
+            if (!_accountMenuOpen || _dialogOpen)
+            {
+                return;
+            }
+
+            _accountMenuOpen = false;
+            AccountMenuCard.IsHitTestVisible = false;
+            SetTranslate(AccountMenuCard, 0, 0);
+
+            double opacity = ModalOverlay.Opacity;
+            Storyboard storyboard = new Storyboard();
+            AddOpacityAnimation(storyboard, ModalOverlay, opacity, 0, 140);
+            AddTranslateYAnimation(storyboard, AccountMenuCard, 20, 160);
+            storyboard.Completed += AccountMenuClose_Completed;
+            storyboard.Begin();
+        }
+
+        private void AccountMenuClose_Completed(object sender, EventArgs e)
+        {
+            if (_accountMenuOpen || _dialogOpen)
+            {
+                return;
+            }
+
+            ModalOverlay.Visibility = Visibility.Collapsed;
+            SetModalBackgroundLocked(false);
+            ResetModalPositions();
+        }
+
+        private void ModalOverlay_Tap(object sender, System.Windows.Input.GestureEventArgs e)
+        {
+            if (_suppressBackdropTap)
+            {
+                return;
+            }
+
+            if (_dialogOpen)
+            {
+                HideNothingDialog(false);
+                return;
+            }
+
+            HideAccountMenu();
+        }
+
+        private void AccountMenuCard_Tap(object sender, System.Windows.Input.GestureEventArgs e)
+        {
+            e.Handled = true;
+        }
+
+        private void AccountMenuClose_Click(object sender, RoutedEventArgs e)
+        {
+            HideAccountMenu();
+        }
+
+        private void AccountMenuRefresh_Click(object sender, RoutedEventArgs e)
+        {
+            LoadQuotaAsync();
+            LoadFolder(currentPath);
+        }
+
+        private void AccountMenuLogout_Click(object sender, RoutedEventArgs e)
+        {
+            App.Log("modal: logout click, accountOpen=" + _accountMenuOpen + ", dialogOpen=" + _dialogOpen);
+            ShowNothingDialog(
+                "ВЫЙТИ ИЗ АККАУНТА?",
+                "Текущий аккаунт будет отключён на этом устройстве. Файлы на Яндекс.Диске останутся.",
+                "ВЫЙТИ",
+                PerformLogout,
+                "ОТМЕНА",
+                null,
+                true);
+        }
+
+        private void UpdateAccountMenu()
+        {
+            AccountMenuLogin.Text = string.IsNullOrEmpty(_login) ? "Не указан" : _login;
+
+            if (_quota == null)
+            {
+                _storagePercent = 0;
+                AccountStorageTrack.Visibility = Visibility.Collapsed;
+                AccountStorageText.Text = _quotaFailed ? "Недоступно" : "Загрузка...";
+                UpdateStorageBarWidth();
+                return;
+            }
+
+            if (_quota.HasAvailable && _quota.TotalBytes > 0)
+            {
+                double percent = _quota.UsedBytes * 100.0 / _quota.TotalBytes;
+                _storagePercent = Math.Min(100.0, Math.Max(0.0, percent));
+                AccountStorageTrack.Visibility = Visibility.Visible;
+                AccountStorageText.Text = "Использовано " + YandexWebDavClient.FormatSize(_quota.UsedBytes) +
+                                          " из " + YandexWebDavClient.FormatSize(_quota.TotalBytes);
+            }
+            else
+            {
+                _storagePercent = 0;
+                AccountStorageTrack.Visibility = Visibility.Collapsed;
+                AccountStorageText.Text = "Использовано " + YandexWebDavClient.FormatSize(_quota.UsedBytes);
+            }
+
+            UpdateStorageBarWidth();
+        }
+
+        private void AccountStorageTrack_SizeChanged(object sender, SizeChangedEventArgs e)
+        {
+            UpdateStorageBarWidth();
+        }
+
+        private void UpdateStorageBarWidth()
+        {
+            if (AccountStorageTrack == null || AccountStorageFill == null || AccountStorageTrack.ActualWidth <= 0)
+            {
+                return;
+            }
+
+            AccountStorageFill.Width = AccountStorageTrack.ActualWidth * _storagePercent / 100.0;
+        }
+
+        private void ShowNothingDialog(string title, string message, string primaryText, Action primaryAction,
+                                       string secondaryText, Action secondaryAction, bool isDanger)
+        {
+            if (_dialogOpen)
+            {
+                return;
+            }
+
+            _dialogOpen = true;
+            _dialogInsideAccountMenu = _accountMenuOpen;
+            _suppressBackdropTap = _dialogInsideAccountMenu;
+            _dialogPrimaryAction = primaryAction;
+            _dialogSecondaryAction = secondaryAction;
+            App.Log("modal: show dialog, fromAccount=" + _dialogInsideAccountMenu);
+
+            NothingDialogTitle.Text = title;
+            NothingDialogMessage.Text = message;
+            NothingDialogPrimaryButton.Content = primaryText;
+            NothingDialogPrimaryButton.Background = (SolidColorBrush)Application.Current.Resources[
+                isDanger ? "NothingRedBrush" : "NothingInkBrush"];
+
+            if (string.IsNullOrEmpty(secondaryText))
+            {
+                NothingDialogSecondaryButton.Visibility = Visibility.Collapsed;
+            }
+            else
+            {
+                NothingDialogSecondaryButton.Visibility = Visibility.Visible;
+                NothingDialogSecondaryButton.Content = secondaryText;
+            }
+
+            NothingDialogCard.Visibility = Visibility.Visible;
+            NothingDialogCard.IsHitTestVisible = false;
+
+            if (_dialogInsideAccountMenu)
+            {
+                double width = GetModalWidth();
+
+                AccountMenuCard.Visibility = Visibility.Visible;
+                AccountMenuCard.IsHitTestVisible = false;
+                SetTranslate(AccountMenuCard, 0, 0);
+                SetTranslate(NothingDialogCard, width, 0);
+
+                App.Log("modal: swipe to dialog, width=" + width);
+
+                Storyboard swap = new Storyboard();
+                AddTranslateXAnimation(swap, AccountMenuCard, -width, 280);
+                AddTranslateXAnimation(swap, NothingDialogCard, 0, 280);
+                swap.Completed += (sender, e) =>
+                {
+                    App.Log("modal: swipe to dialog done, dialogOpen=" + _dialogOpen +
+                            ", fromAccount=" + _dialogInsideAccountMenu);
+
+                    _suppressBackdropTap = false;
+
+                    if (_dialogOpen && _dialogInsideAccountMenu)
+                    {
+                        SetTranslate(AccountMenuCard, -width, 0);
+                        SetTranslate(NothingDialogCard, 0, 0);
+                        AccountMenuCard.Visibility = Visibility.Collapsed;
+                        NothingDialogCard.Visibility = Visibility.Visible;
+                        NothingDialogCard.IsHitTestVisible = true;
+                    }
+                };
+                swap.Begin();
+                return;
+            }
+
+            AccountMenuCard.Visibility = Visibility.Collapsed;
+            SetTranslate(NothingDialogCard, 0, 20);
+            NothingDialogCard.IsHitTestVisible = true;
+
+            if (ModalOverlay.Visibility != Visibility.Visible)
+            {
+                ModalOverlay.Opacity = 0;
+                ModalOverlay.Visibility = Visibility.Visible;
+                SetModalBackgroundLocked(true);
+            }
+
+            Storyboard storyboard = new Storyboard();
+            AddOpacityAnimation(storyboard, ModalOverlay, 0, 1, 140);
+            AddTranslateYAnimation(storyboard, NothingDialogCard, 0, 180);
+            storyboard.Begin();
+        }
+
+        private void HideNothingDialog(bool primary)
+        {
+            if (!_dialogOpen)
+            {
+                return;
+            }
+
+            _dialogOpen = false;
+            _suppressBackdropTap = false;
+            Action action = primary ? _dialogPrimaryAction : _dialogSecondaryAction;
+            bool fromAccountMenu = _dialogInsideAccountMenu;
+            _dialogInsideAccountMenu = false;
+            _dialogPrimaryAction = null;
+            _dialogSecondaryAction = null;
+
+            if (!primary && fromAccountMenu)
+            {
+                double width = GetModalWidth();
+
+                AccountMenuCard.Visibility = Visibility.Visible;
+                AccountMenuCard.IsHitTestVisible = false;
+                SetTranslate(AccountMenuCard, -width, 0);
+                NothingDialogCard.IsHitTestVisible = false;
+
+                App.Log("modal: swipe back to account, width=" + width);
+
+                Storyboard swap = new Storyboard();
+                AddTranslateXAnimation(swap, NothingDialogCard, width, 280);
+                AddTranslateXAnimation(swap, AccountMenuCard, 0, 280);
+                swap.Completed += (sender, e) =>
+                {
+                    App.Log("modal: swipe back done, dialogOpen=" + _dialogOpen +
+                            ", accountOpen=" + _accountMenuOpen);
+
+                    if (_dialogOpen || !_accountMenuOpen)
+                    {
+                        return;
+                    }
+
+                    NothingDialogCard.Visibility = Visibility.Collapsed;
+                    NothingDialogCard.IsHitTestVisible = true;
+                    SetTranslate(NothingDialogCard, width, 0);
+                    SetTranslate(AccountMenuCard, 0, 0);
+                    AccountMenuCard.IsHitTestVisible = true;
+
+                    if (action != null)
+                    {
+                        action();
+                    }
+                };
+                swap.Begin();
+                return;
+            }
+
+            if (fromAccountMenu)
+            {
+                _accountMenuOpen = false;
+            }
+
+            AccountMenuCard.IsHitTestVisible = false;
+            NothingDialogCard.IsHitTestVisible = false;
+
+            double opacity = ModalOverlay.Opacity;
+            Storyboard storyboard = new Storyboard();
+            AddOpacityAnimation(storyboard, ModalOverlay, opacity, 0, 140);
+            storyboard.Completed += (sender, e) =>
+            {
+                if (_dialogOpen || _accountMenuOpen)
+                {
+                    return;
+                }
+
+                ModalOverlay.Visibility = Visibility.Collapsed;
+                SetModalBackgroundLocked(false);
+                ResetModalPositions();
+
+                if (action != null)
+                {
+                    action();
+                }
+            };
+            storyboard.Begin();
+        }
+
+        private void NothingDialogCard_Tap(object sender, System.Windows.Input.GestureEventArgs e)
+        {
+            e.Handled = true;
+        }
+
+        private void NothingDialogPrimary_Click(object sender, RoutedEventArgs e)
+        {
+            HideNothingDialog(true);
+        }
+
+        private void NothingDialogSecondary_Click(object sender, RoutedEventArgs e)
+        {
+            HideNothingDialog(false);
+        }
+
+        private static void SetTranslate(UIElement element, double x, double y)
+        {
+            element.RenderTransform = new TranslateTransform { X = x, Y = y };
+        }
+
+        private static void AddOpacityAnimation(Storyboard storyboard, DependencyObject target,
+                                                double from, double to, int milliseconds)
+        {
+            DoubleAnimation animation = new DoubleAnimation();
+            animation.From = from;
+            animation.To = to;
+            animation.Duration = TimeSpan.FromMilliseconds(milliseconds);
+            animation.EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut };
+            Storyboard.SetTarget(animation, target);
+            Storyboard.SetTargetProperty(animation, new PropertyPath("Opacity"));
+            storyboard.Children.Add(animation);
+        }
+
+        private static void AddTranslateXAnimation(Storyboard storyboard, UIElement target, double to, int milliseconds)
+        {
+            DoubleAnimation animation = new DoubleAnimation();
+            animation.To = to;
+            animation.Duration = TimeSpan.FromMilliseconds(milliseconds);
+            animation.EasingFunction = new CubicEase { EasingMode = EasingMode.EaseInOut };
+            Storyboard.SetTarget(animation, target);
+            Storyboard.SetTargetProperty(animation, new PropertyPath("(UIElement.RenderTransform).(TranslateTransform.X)"));
+            storyboard.Children.Add(animation);
+        }
+
+        private static void AddTranslateYAnimation(Storyboard storyboard, UIElement target, double to, int milliseconds)
+        {
+            DoubleAnimation animation = new DoubleAnimation();
+            animation.To = to;
+            animation.Duration = TimeSpan.FromMilliseconds(milliseconds);
+            animation.EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut };
+            Storyboard.SetTarget(animation, target);
+            Storyboard.SetTargetProperty(animation, new PropertyPath("(UIElement.RenderTransform).(TranslateTransform.Y)"));
+            storyboard.Children.Add(animation);
+        }
+
+        private double GetModalWidth()
+        {
+            return ModalOverlay.ActualWidth > 0 ? ModalOverlay.ActualWidth : 480.0;
+        }
+
+        private void SetModalBackgroundLocked(bool locked)
+        {
+            MainPivot.IsEnabled = !locked;
+            MainPivot.IsHitTestVisible = !locked;
+            BottomActionPanel.IsHitTestVisible = !locked;
+            AuthArea.IsHitTestVisible = !locked;
+        }
+
+        private void ResetModalPositions()
+        {
+            double width = GetModalWidth();
+
+            AccountMenuCard.Visibility = Visibility.Visible;
+            AccountMenuCard.IsHitTestVisible = true;
+            SetTranslate(AccountMenuCard, 0, 24);
+
+            NothingDialogCard.Visibility = Visibility.Collapsed;
+            NothingDialogCard.IsHitTestVisible = true;
+            SetTranslate(NothingDialogCard, width, 0);
+        }
+
+        private void CloseOverlaysImmediate()
+        {
+            _accountMenuOpen = false;
+            _dialogOpen = false;
+            _dialogInsideAccountMenu = false;
+            _suppressBackdropTap = false;
+            _dialogPrimaryAction = null;
+            _dialogSecondaryAction = null;
+
+            ModalOverlay.Visibility = Visibility.Collapsed;
+            SetModalBackgroundLocked(false);
+            ResetModalPositions();
+        }
+
+        private void PerformLogout()
+        {
+            CloseOverlaysImmediate();
             ClearCredentials();
             _pendingDownloadFile = null;
             ClearPendingDownload();
@@ -304,6 +755,9 @@ namespace LumiaYD
             FilesListBox.ItemsSource = null;
             currentPath = "/";
             SaveSetting(CurrentPathKey, "/");
+            _quota = null;
+            _quotaFailed = false;
+            UpdateAccountMenu();
             MainPivot.Visibility = Visibility.Collapsed;
             ShowAuth();
         }
@@ -313,6 +767,7 @@ namespace LumiaYD
             AuthArea.Visibility = Visibility.Collapsed;
             MainPivot.Visibility = Visibility.Visible;
             CurrentAccountText.Text = _login;
+            UpdateAccountMenu();
             _webDav = new YandexWebDavClient(_login, _password);
             LoadFolder(currentPath);
             LoadQuotaAsync();
@@ -438,6 +893,8 @@ namespace LumiaYD
             CancelQuotaRequest();
             _quotaCancellation = new CancellationTokenSource();
             CancellationToken token = _quotaCancellation.Token;
+            _quotaFailed = false;
+            UpdateAccountMenu();
 
             try
             {
@@ -446,6 +903,10 @@ namespace LumiaYD
                 {
                     return;
                 }
+
+                _quota = quota;
+                _quotaFailed = quota == null;
+                UpdateAccountMenu();
 
                 if (quota == null)
                 {
@@ -468,6 +929,9 @@ namespace LumiaYD
             {
                 if (!token.IsCancellationRequested)
                 {
+                    _quota = null;
+                    _quotaFailed = true;
+                    UpdateAccountMenu();
                     StorageText.Text = "Недоступно";
                 }
             }
