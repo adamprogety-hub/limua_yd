@@ -4,6 +4,7 @@ using System.Windows.Navigation;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
+using System.Windows.Threading;
 using Microsoft.Phone.Controls;
 using Microsoft.Phone.Shell;
 using System.IO.IsolatedStorage;
@@ -56,6 +57,11 @@ namespace LumiaYD
         private Action _dialogPrimaryAction;
         private Action _dialogSecondaryAction;
 
+        private readonly DispatcherTimer _directoryCollapseTimer = new DispatcherTimer();
+        private bool _directoryExpanded = true;
+        private bool _selectedIslandOpen;
+        private int _selectedIslandVersion;
+
         public MainPage()
         {
             InitializeComponent();
@@ -64,6 +70,9 @@ namespace LumiaYD
             TransferListBox.ItemsSource = _transfers;
             _transfers.CollectionChanged += (s, e) => UpdateTransfersEmptyState();
             UpdateTransfersEmptyState();
+
+            _directoryCollapseTimer.Interval = TimeSpan.FromSeconds(6);
+            _directoryCollapseTimer.Tick += DirectoryCollapseTimer_Tick;
         }
 
         private void UpdateTransfersEmptyState()
@@ -87,15 +96,15 @@ namespace LumiaYD
                 return;
             }
 
-            if (AuthArea.Visibility == Visibility.Visible)
+            if (_selectedIslandOpen)
             {
+                e.Cancel = true;
+                HideSelectedIsland();
                 return;
             }
 
-            if (BottomActionPanel.Visibility == Visibility.Visible)
+            if (AuthArea.Visibility == Visibility.Visible)
             {
-                e.Cancel = true;
-                BottomActionPanel.Visibility = Visibility.Collapsed;
                 return;
             }
 
@@ -151,6 +160,8 @@ namespace LumiaYD
             {
                 LoadDiagnostics();
             }
+
+            UpdateBottomIslandsVisibility();
         }
 
         private void LoadCredentials()
@@ -220,7 +231,7 @@ namespace LumiaYD
         {
             AuthArea.Visibility = Visibility.Visible;
             MainPivot.Visibility = Visibility.Collapsed;
-            BottomActionPanel.Visibility = Visibility.Collapsed;
+            ResetBottomIslands();
             LoginTextBox.Text = _login ?? "";
             PasswordBox.Password = _password ?? "";
             StatusText.Text = "ВВЕДИТЕ ЛОГИН И ПАРОЛЬ ПРИЛОЖЕНИЯ";
@@ -714,7 +725,7 @@ namespace LumiaYD
         {
             MainPivot.IsEnabled = !locked;
             MainPivot.IsHitTestVisible = !locked;
-            BottomActionPanel.IsHitTestVisible = !locked;
+            BottomIslands.IsHitTestVisible = !locked;
             AuthArea.IsHitTestVisible = !locked;
         }
 
@@ -769,6 +780,12 @@ namespace LumiaYD
             CurrentAccountText.Text = _login;
             UpdateAccountMenu();
             _webDav = new YandexWebDavClient(_login, _password);
+
+            selectedItem = null;
+            _selectedIslandOpen = false;
+            _directoryExpanded = true;
+            UpdateBottomIslandsVisibility();
+
             LoadFolder(currentPath);
             LoadQuotaAsync();
         }
@@ -815,7 +832,15 @@ namespace LumiaYD
 
             currentPath = path;
             string pretty = Uri.UnescapeDataString(path).Trim('/');
+            string prettyPath = pretty == "" ? "диск /" : "диск / " + pretty.Replace("/", " / ");
             CurrentPathText.Text = pretty == "" ? "диск / ЗАГРУЗКА..." : "диск / " + pretty + " ЗАГРУЗКА...";
+            DirectoryPathText.Text = prettyPath;
+
+            if (_selectedIslandOpen)
+            {
+                HideSelectedIslandImmediate();
+            }
+            ShowDirectoryIsland();
 
             try
             {
@@ -843,6 +868,7 @@ namespace LumiaYD
                 CurrentPathText.Text = pretty == ""
                     ? "диск / (" + itemCount + " элементов)"
                     : "диск / " + pretty + " (" + itemCount + " элементов)";
+                DirectoryPathText.Text = prettyPath;
             }
             catch (OperationCanceledException)
             {
@@ -862,13 +888,13 @@ namespace LumiaYD
 
                 if (ex.StatusCode == HttpStatusCode.NotFound && path != "/")
                 {
-                    MessageBox.Show("Папка не найдена. Открываю корень Диска.", "Инфо", MessageBoxButton.OK);
+                    ShowInfoDialog("ПАПКА НЕ НАЙДЕНА", "Открываю корень Диска.");
                     LoadFolder("/");
                     return;
                 }
 
                 CurrentPathText.Text = "диск / ОШИБКА";
-                MessageBox.Show("Не удалось открыть папку:\n" + ex.Message, "Сбой", MessageBoxButton.OK);
+                ShowInfoDialog("СБОЙ", "Не удалось открыть папку:\n" + ex.Message);
             }
             catch (Exception ex)
             {
@@ -878,7 +904,7 @@ namespace LumiaYD
                 }
 
                 CurrentPathText.Text = "диск / ОШИБКА";
-                MessageBox.Show("Ошибка при открытии папки:\n" + ex.Message, "Сбой", MessageBoxButton.OK);
+                ShowInfoDialog("СБОЙ", "Ошибка при открытии папки:\n" + ex.Message);
             }
         }
 
@@ -941,7 +967,10 @@ namespace LumiaYD
         {
             YandexFileItem item = FilesListBox.SelectedItem as YandexFileItem;
             FilesListBox.SelectedIndex = -1;
-            if (item == null) return;
+            if (item == null)
+            {
+                return;
+            }
 
             if (item.Name == "..")
             {
@@ -949,15 +978,13 @@ namespace LumiaYD
                 return;
             }
 
-            if (item.IsFolder)
+            if (_selectedIslandOpen && item == selectedItem)
             {
-                LoadFolder(item.Href);
+                HideSelectedIsland();
+                return;
             }
-            else
-            {
-                selectedItem = item;
-                ShowActionPanel(false);
-            }
+
+            ShowSelectedIsland(item);
         }
 
         private void FilesListBox_Hold(object sender, System.Windows.Input.GestureEventArgs e)
@@ -965,42 +992,359 @@ namespace LumiaYD
             try
             {
                 var item = ((FrameworkElement)e.OriginalSource).DataContext as YandexFileItem;
-                if (item == null || item.Name == "..") return;
+                if (item == null || item.Name == "..")
+                {
+                    return;
+                }
 
-                selectedItem = item;
-                ShowActionPanel(item.IsFolder);
+                ShowSelectedIsland(item);
             }
             catch
             {
             }
         }
 
-        private void ShowActionPanel(bool isFolder)
+        private void ShowSelectedIsland(YandexFileItem item)
         {
-            DownloadButton.Visibility = isFolder ? Visibility.Collapsed : Visibility.Visible;
-            UploadButton.Visibility = isFolder ? Visibility.Visible : Visibility.Collapsed;
-            BottomActionPanel.Visibility = Visibility.Visible;
+            selectedItem = item;
+            _selectedIslandOpen = true;
+            _selectedIslandVersion++;
+            int version = _selectedIslandVersion;
+
+            SelectedIslandTitle.Text = item.Name;
+            SelectedIslandSubtitle.Text = item.IsFolder
+                ? "ПАПКА"
+                : ("ФАЙЛ" + (string.IsNullOrEmpty(item.Info) ? "" : " · " + item.Info.ToUpperInvariant()));
+            SelectedIslandTypeIcon.Text = item.IsFolder ? "\uE24A" : "\uE230";
+
+            FileActionsGrid.Visibility = item.IsFolder ? Visibility.Collapsed : Visibility.Visible;
+            FolderActionsGrid.Visibility = item.IsFolder ? Visibility.Visible : Visibility.Collapsed;
+
+            CollapseDirectoryIsland();
+            ApplyDimming(item);
+
+            SelectedIsland.Visibility = Visibility.Visible;
+            SelectedIsland.IsHitTestVisible = true;
+            SelectedIsland.Opacity = 0;
+            SetTranslate(SelectedIsland, 0, 14);
+
+            Storyboard storyboard = new Storyboard();
+            AddOpacityAnimation(storyboard, SelectedIsland, 0, 1, 160);
+            AddTranslateYAnimation(storyboard, SelectedIsland, 0, 180);
+            storyboard.Completed += (s, e) =>
+            {
+                if (_selectedIslandOpen && version == _selectedIslandVersion)
+                {
+                    SetTranslate(SelectedIsland, 0, 0);
+                }
+            };
+            storyboard.Begin();
+
+            _directoryCollapseTimer.Stop();
+            UpdateBottomIslandsPadding();
         }
 
-        private void DownloadButton_Click(object sender, RoutedEventArgs e)
+        private void HideSelectedIsland()
         {
-            BottomActionPanel.Visibility = Visibility.Collapsed;
-            if (selectedItem != null && !selectedItem.IsFolder)
+            if (!_selectedIslandOpen)
             {
-                DownloadFile(selectedItem);
+                return;
+            }
+
+            _selectedIslandOpen = false;
+            _selectedIslandVersion++;
+            int version = _selectedIslandVersion;
+            SelectedIsland.IsHitTestVisible = false;
+
+            Storyboard storyboard = new Storyboard();
+            AddOpacityAnimation(storyboard, SelectedIsland, SelectedIsland.Opacity, 0, 130);
+            AddTranslateYAnimation(storyboard, SelectedIsland, 14, 130);
+            storyboard.Completed += (s, e) =>
+            {
+                if (_selectedIslandOpen || version != _selectedIslandVersion)
+                {
+                    return;
+                }
+
+                SelectedIsland.Visibility = Visibility.Collapsed;
+                SelectedIsland.IsHitTestVisible = true;
+                selectedItem = null;
+                ClearDimming();
+                ShowDirectoryIsland();
+                UpdateBottomIslandsPadding();
+            };
+            storyboard.Begin();
+        }
+
+        private void HideSelectedIslandImmediate()
+        {
+            _selectedIslandOpen = false;
+            _selectedIslandVersion++;
+            SelectedIsland.Visibility = Visibility.Collapsed;
+            SelectedIsland.IsHitTestVisible = true;
+            selectedItem = null;
+            ClearDimming();
+            ShowDirectoryIsland();
+            UpdateBottomIslandsPadding();
+        }
+
+        private void ApplyDimming(YandexFileItem selected)
+        {
+            var items = FilesListBox.ItemsSource as IEnumerable<YandexFileItem>;
+            if (items == null)
+            {
+                return;
+            }
+
+            foreach (YandexFileItem item in items)
+            {
+                item.DimOpacity = item == selected ? 1.0 : 0.32;
             }
         }
 
-        private void UploadButton_Click(object sender, RoutedEventArgs e)
+        private void ClearDimming()
         {
-            BottomActionPanel.Visibility = Visibility.Collapsed;
-            MessageBox.Show("Функция загрузки на диск будет добавлена следующим шагом!", "Инфо", MessageBoxButton.OK);
+            var items = FilesListBox.ItemsSource as IEnumerable<YandexFileItem>;
+            if (items == null)
+            {
+                return;
+            }
+
+            foreach (YandexFileItem item in items)
+            {
+                item.DimOpacity = 1.0;
+            }
         }
 
-        private void DeleteButton_Click(object sender, RoutedEventArgs e)
+        private void UpdateBottomIslandsVisibility()
         {
-            BottomActionPanel.Visibility = Visibility.Collapsed;
-            MessageBox.Show("Функция удаления будет добавлена следующим шагом!", "Инфо", MessageBoxButton.OK);
+            if (BottomIslands == null || FilesListBox == null)
+            {
+                return;
+            }
+
+            bool visible = MainPivot.Visibility == Visibility.Visible && MainPivot.SelectedIndex == 0;
+            if (!visible)
+            {
+                _directoryCollapseTimer.Stop();
+                BottomIslands.Visibility = Visibility.Collapsed;
+                UpdateBottomIslandsPadding();
+                return;
+            }
+
+            BottomIslands.Visibility = Visibility.Visible;
+            ApplyBottomIslandState();
+            UpdateBottomIslandsPadding();
+            RestartDirectoryCollapseTimer();
+        }
+
+        private void ApplyBottomIslandState()
+        {
+            SelectedIsland.Visibility = _selectedIslandOpen ? Visibility.Visible : Visibility.Collapsed;
+            DirectoryIsland.Visibility = _directoryExpanded ? Visibility.Visible : Visibility.Collapsed;
+            DirectoryMicroIsland.Visibility = _directoryExpanded ? Visibility.Collapsed : Visibility.Visible;
+        }
+
+        private void ResetBottomIslands()
+        {
+            _directoryCollapseTimer.Stop();
+            _selectedIslandOpen = false;
+            _selectedIslandVersion++;
+            _directoryExpanded = true;
+            selectedItem = null;
+
+            BottomIslands.Visibility = Visibility.Collapsed;
+            SelectedIsland.Visibility = Visibility.Collapsed;
+            SelectedIsland.IsHitTestVisible = true;
+            DirectoryIsland.Visibility = Visibility.Collapsed;
+            DirectoryMicroIsland.Visibility = Visibility.Collapsed;
+            ClearDimming();
+            UpdateBottomIslandsPadding();
+        }
+
+        private void UpdateBottomIslandsPadding()
+        {
+            if (FilesListBox == null || BottomIslands == null)
+            {
+                return;
+            }
+
+            double bottom = 0;
+
+            if (BottomIslands.Visibility == Visibility.Visible)
+            {
+                if (_selectedIslandOpen)
+                {
+                    bottom = _directoryExpanded ? 326 : 240;
+                }
+                else
+                {
+                    bottom = _directoryExpanded ? 152 : 68;
+                }
+            }
+
+            FilesListBox.Margin = new Thickness(0, 0, 0, bottom);
+        }
+
+        private void ShowDirectoryIsland()
+        {
+            bool wasVisible = DirectoryIsland.Visibility == Visibility.Visible;
+            _directoryExpanded = true;
+
+            DirectoryMicroIsland.Visibility = Visibility.Collapsed;
+            DirectoryIsland.Visibility = Visibility.Visible;
+
+            if (!wasVisible && BottomIslands.Visibility == Visibility.Visible)
+            {
+                DirectoryIsland.Opacity = 0;
+                SetTranslate(DirectoryIsland, 0, 12);
+
+                Storyboard storyboard = new Storyboard();
+                AddOpacityAnimation(storyboard, DirectoryIsland, 0, 1, 150);
+                AddTranslateYAnimation(storyboard, DirectoryIsland, 0, 170);
+                storyboard.Begin();
+            }
+            else
+            {
+                DirectoryIsland.Opacity = 1;
+                SetTranslate(DirectoryIsland, 0, 0);
+            }
+
+            UpdateBottomIslandsPadding();
+            RestartDirectoryCollapseTimer();
+        }
+
+        private void CollapseDirectoryIsland()
+        {
+            if (!_directoryExpanded)
+            {
+                return;
+            }
+
+            _directoryExpanded = false;
+            _directoryCollapseTimer.Stop();
+
+            DirectoryIsland.Visibility = Visibility.Collapsed;
+            DirectoryMicroIsland.Visibility = Visibility.Visible;
+            DirectoryMicroIsland.Opacity = 0;
+
+            Storyboard storyboard = new Storyboard();
+            AddOpacityAnimation(storyboard, DirectoryMicroIsland, 0, 1, 150);
+            storyboard.Begin();
+
+            UpdateBottomIslandsPadding();
+        }
+
+        private void RestartDirectoryCollapseTimer()
+        {
+            _directoryCollapseTimer.Stop();
+
+            if (BottomIslands.Visibility == Visibility.Visible && _directoryExpanded && !_selectedIslandOpen)
+            {
+                _directoryCollapseTimer.Start();
+            }
+        }
+
+        private void DirectoryCollapseTimer_Tick(object sender, EventArgs e)
+        {
+            _directoryCollapseTimer.Stop();
+
+            if (BottomIslands.Visibility == Visibility.Visible && _directoryExpanded && !_selectedIslandOpen)
+            {
+                CollapseDirectoryIsland();
+            }
+        }
+
+        private void DirectoryCollapse_Click(object sender, RoutedEventArgs e)
+        {
+            CollapseDirectoryIsland();
+        }
+
+        private void DirectoryMicroIsland_Tap(object sender, System.Windows.Input.GestureEventArgs e)
+        {
+            e.Handled = true;
+            ShowDirectoryIsland();
+        }
+
+        private void SelectedIslandClose_Click(object sender, RoutedEventArgs e)
+        {
+            HideSelectedIsland();
+        }
+
+        private void SelectedOpenFolder_Click(object sender, RoutedEventArgs e)
+        {
+            YandexFileItem item = selectedItem;
+            if (item == null || !item.IsFolder)
+            {
+                return;
+            }
+
+            HideSelectedIslandImmediate();
+            LoadFolder(item.Href);
+        }
+
+        private void SelectedDownload_Click(object sender, RoutedEventArgs e)
+        {
+            YandexFileItem item = selectedItem;
+            if (item == null || item.IsFolder)
+            {
+                return;
+            }
+
+            HideSelectedIslandImmediate();
+            DownloadFile(item);
+        }
+
+        private void SelectedDownloadAll_Click(object sender, RoutedEventArgs e)
+        {
+            ShowInfoDialog("СКАЧАТЬ ВСЁ", "Скачивание папки целиком появится в следующем обновлении.");
+        }
+
+        private void SelectedRename_Click(object sender, RoutedEventArgs e)
+        {
+            ShowInfoDialog("ПЕРЕИМЕНОВАНИЕ", "Переименование объекта появится в следующем обновлении.");
+        }
+
+        private void SelectedDelete_Click(object sender, RoutedEventArgs e)
+        {
+            string name = selectedItem != null ? selectedItem.Name : "объект";
+            ShowInfoDialog("УДАЛЕНИЕ", "Удаление «" + name + "» появится в следующем обновлении.");
+        }
+
+        private void SelectedProperties_Click(object sender, RoutedEventArgs e)
+        {
+            YandexFileItem item = selectedItem;
+            if (item == null)
+            {
+                return;
+            }
+
+            string message = (item.IsFolder ? "Папка" : "Файл") + "\n" +
+                             (string.IsNullOrEmpty(item.Info) ? "" : item.Info + "\n") +
+                             "\nПуть:\n" + Uri.UnescapeDataString(item.Href);
+            ShowNothingDialog(item.Name, message, "ПОНЯТНО", null, null, null, false);
+        }
+
+        private void UploadFile_Click(object sender, RoutedEventArgs e)
+        {
+            ShowInfoDialog("ЗАГРУЗИТЬ ФАЙЛ", "Загрузка файлов на Диск появится в следующем обновлении.");
+        }
+
+        private void CreateFolder_Click(object sender, RoutedEventArgs e)
+        {
+            ShowInfoDialog("НОВАЯ ПАПКА", "Создание папки появится в следующем обновлении.");
+        }
+
+        private void RefreshFolder_Click(object sender, RoutedEventArgs e)
+        {
+            RestartDirectoryCollapseTimer();
+            LoadFolder(currentPath);
+            LoadQuotaAsync();
+        }
+
+        private void ShowInfoDialog(string title, string message)
+        {
+            ShowNothingDialog(title, message, "ПОНЯТНО", null, null, null, false);
         }
 
         private void DownloadFile(YandexFileItem file)
@@ -1039,7 +1383,7 @@ namespace LumiaYD
             {
                 _pendingDownloadFile = null;
                 ClearPendingDownload();
-                MessageBox.Show("Не удалось открыть выбор файла:\n" + ex.Message, "Сбой", MessageBoxButton.OK);
+                ShowInfoDialog("СБОЙ", "Не удалось открыть выбор файла:\n" + ex.Message);
             }
         }
 
@@ -1120,13 +1464,13 @@ namespace LumiaYD
 
                 transfer.StatusText = "В галерее";
                 transfer.Progress = 100;
-                MessageBox.Show("Картинка сохранена в галерею!\nЧерез USB: Phone\\Pictures", "Успех", MessageBoxButton.OK);
+                ShowInfoDialog("ГОТОВО", "Картинка сохранена в галерею!\nЧерез USB: Phone\\Pictures");
             }
             catch (Exception ex)
             {
                 transfer.StatusText = "Ошибка";
                 transfer.IconColor = "#E81123";
-                MessageBox.Show("Ошибка при скачивании картинки:\n" + ex.Message, "Сбой", MessageBoxButton.OK);
+                ShowInfoDialog("СБОЙ", "Ошибка при скачивании картинки:\n" + ex.Message);
             }
             finally
             {
@@ -1172,7 +1516,7 @@ namespace LumiaYD
             {
                 _pendingDownloadFile = null;
                 ClearPendingDownload();
-                MessageBox.Show("Скачивание отменено", "Инфо", MessageBoxButton.OK);
+                ShowInfoDialog("ИНФО", "Скачивание отменено");
             }
         }
 
@@ -1403,7 +1747,7 @@ namespace LumiaYD
                     transfer.StatusText = "Готово";
                     transfer.Progress = 100;
                     App.Log("download done: " + file.Name + " (" + downloadedBytes + " bytes)");
-                    MessageBox.Show("Файл сохранён в выбранную папку!\nТеперь он виден через USB.", "Успех", MessageBoxButton.OK);
+                    ShowInfoDialog("ГОТОВО", "Файл сохранён в выбранную папку!\nТеперь он виден через USB.");
                 }
                 else
                 {
@@ -1411,8 +1755,8 @@ namespace LumiaYD
                     transfer.IconColor = "#E81123";
                     App.Log("download failed: " + file.Name + " at " + downloadedBytes + " / " + totalBytes +
                         ": " + (lastError != null ? lastError.Message : "?"));
-                    MessageBox.Show("Не удалось скачать файл полностью.\nПоследняя ошибка: " +
-                        (lastError != null ? lastError.Message : "Неизвестно"), "Сбой", MessageBoxButton.OK);
+                    ShowInfoDialog("СБОЙ", "Не удалось скачать файл полностью.\nПоследняя ошибка: " +
+                        (lastError != null ? lastError.Message : "Неизвестно"));
                 }
             }
             catch (Exception ex)
@@ -1420,7 +1764,7 @@ namespace LumiaYD
                 transfer.StatusText = "Ошибка";
                 transfer.IconColor = "#E81123";
                 App.Log("download exception: " + ex);
-                MessageBox.Show("Не удалось скачать файл:\n" + ex.Message, "Сбой", MessageBoxButton.OK);
+                ShowInfoDialog("СБОЙ", "Не удалось скачать файл:\n" + ex.Message);
             }
             finally
             {

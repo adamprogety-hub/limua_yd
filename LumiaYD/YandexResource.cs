@@ -1,11 +1,41 @@
-﻿namespace LumiaYD
+﻿using System.ComponentModel;
+
+namespace LumiaYD
 {
-    public class YandexFileItem
+    public class YandexFileItem : INotifyPropertyChanged
     {
+        private double _dimOpacity = 1.0;
+
         public string Name { get; set; }
         public string Info { get; set; }
         public string Href { get; set; }
         public bool IsFolder { get; set; }
+
+        public double DimOpacity
+        {
+            get { return _dimOpacity; }
+            set
+            {
+                if (_dimOpacity == value)
+                {
+                    return;
+                }
+
+                _dimOpacity = value;
+                OnPropertyChanged("DimOpacity");
+            }
+        }
+
+        public event PropertyChangedEventHandler PropertyChanged;
+
+        private void OnPropertyChanged(string propertyName)
+        {
+            PropertyChangedEventHandler handler = PropertyChanged;
+            if (handler != null)
+            {
+                handler(this, new PropertyChangedEventArgs(propertyName));
+            }
+        }
     }
 
     public class QuotaInfo

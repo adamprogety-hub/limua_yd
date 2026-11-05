@@ -35,7 +35,8 @@ shell:SystemTray.IsVisible="True">
                     <ListBox x:Name="FilesListBox" Grid.Row="1" SelectionChanged="FilesListBox_SelectionChanged" Hold="FilesListBox_Hold">
                         <ListBox.ItemTemplate>
                             <DataTemplate>
-                                <Border BorderBrush="#2A2A2A" BorderThickness="0,0,0,1" Padding="0,16,0,16">
+                                <Border BorderBrush="#2A2A2A" BorderThickness="0,0,0,1" Padding="0,16,0,16"
+                                        Opacity="{Binding DimOpacity}">
                                     <StackPanel Margin="12,0,0,0">
                                         <TextBlock Text="{Binding Name}" FontSize="22" Foreground="White" TextWrapping="NoWrap" FontFamily="Segoe UI Semilight"/>
                                         <TextBlock Text="{Binding Info}" FontSize="16" Foreground="#666666" Margin="0,4,0,0" FontFamily="Segoe UI"/>
@@ -118,38 +119,236 @@ shell:SystemTray.IsVisible="True">
             </phone:PivotItem>
         </phone:Pivot>
 
-        <!-- НИЖНЯЯ ПАНЕЛЬ ДЕЙСТВИЙ (WP8.1 STYLE) -->
-        <Grid x:Name="BottomActionPanel" Visibility="Collapsed" VerticalAlignment="Bottom" Background="#1F1F1F" Height="88">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="*"/>
-            </Grid.ColumnDefinitions>
+        <!-- НИЖНИЕ ОСТРОВА -->
+        <StackPanel x:Name="BottomIslands" VerticalAlignment="Bottom" Canvas.ZIndex="90" Visibility="Collapsed">
 
-            <!-- Кнопка СКАЧАТЬ -->
-            <Button x:Name="DownloadButton" Grid.Column="0" Click="DownloadButton_Click" Background="Transparent" BorderThickness="0" Padding="0">
-                <StackPanel VerticalAlignment="Center">
-                    <Path Data="M12 4 L12 16 M12 16 L7 11 M12 16 L17 11" Stroke="White" StrokeThickness="2" Width="36" Height="36" HorizontalAlignment="Center"/>
-                    <TextBlock Text="скачать" Foreground="White" FontSize="12" HorizontalAlignment="Center" Margin="0,4,0,0" FontFamily="Segoe UI Semibold"/>
-                </StackPanel>
-            </Button>
+            <!-- ОСТРОВ ВЫБРАННОГО ОБЪЕКТА -->
+            <Border x:Name="SelectedIsland" Style="{StaticResource NothingFloatingCard}"
+                    Margin="16,0,16,10" Visibility="Collapsed">
+                <StackPanel>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
 
-            <!-- Кнопка ЗАГРУЗИТЬ -->
-            <Button x:Name="UploadButton" Grid.Column="1" Click="UploadButton_Click" Background="Transparent" BorderThickness="0" Padding="0" Visibility="Collapsed">
-                <StackPanel VerticalAlignment="Center">
-                    <Path Data="M12 16 L12 4 M12 4 L7 9 M12 4 L17 9" Stroke="White" StrokeThickness="2" Width="36" Height="36" HorizontalAlignment="Center"/>
-                    <TextBlock Text="загрузить" Foreground="White" FontSize="12" HorizontalAlignment="Center" Margin="0,4,0,0" FontFamily="Segoe UI Semibold"/>
-                </StackPanel>
-            </Button>
+                        <Border Width="42" Height="42" CornerRadius="21" Background="#EFEFED" VerticalAlignment="Center">
+                            <TextBlock x:Name="SelectedIslandTypeIcon" Text="&#xE230;"
+                                       FontFamily="{StaticResource PhosphorFont}" FontSize="20"
+                                       Foreground="{StaticResource NothingInkBrush}"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
 
-            <!-- Кнопка УДАЛИТЬ -->
-            <Button x:Name="DeleteButton" Grid.Column="2" Click="DeleteButton_Click" Background="Transparent" BorderThickness="0" Padding="0">
-                <StackPanel VerticalAlignment="Center">
-                    <Path Data="M6 6 L18 6 M8 6 L8 18 M16 6 L16 18 M10 9 L10 15 M14 9 L14 15 M9 6 L10 4 L14 4 L15 6" Stroke="#E81123" StrokeThickness="2" Width="36" Height="36" HorizontalAlignment="Center"/>
-                    <TextBlock Text="удалить" Foreground="#E81123" FontSize="12" HorizontalAlignment="Center" Margin="0,4,0,0" FontFamily="Segoe UI Semibold"/>
+                        <StackPanel Grid.Column="1" Margin="12,0,8,0" VerticalAlignment="Center">
+                            <TextBlock x:Name="SelectedIslandTitle" FontSize="17" FontFamily="Segoe UI Semibold"
+                                       Foreground="{StaticResource NothingInkBrush}" TextTrimming="CharacterEllipsis"/>
+                            <TextBlock x:Name="SelectedIslandSubtitle" FontSize="10" FontFamily="Segoe UI Semibold"
+                                       Foreground="{StaticResource NothingMutedLightBrush}" Margin="0,2,0,0"
+                                       TextTrimming="CharacterEllipsis"/>
+                        </StackPanel>
+
+                        <Button Grid.Column="2" Style="{StaticResource NothingCloseButton}" Width="36" Height="36"
+                                Click="SelectedIslandClose_Click" VerticalAlignment="Center">
+                            <TextBlock Text="&#xE4F6;" FontFamily="{StaticResource PhosphorFont}" FontSize="16"
+                                       Foreground="{StaticResource NothingInkBrush}"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Button>
+                    </Grid>
+
+                    <!-- ДЕЙСТВИЯ С ФАЙЛОМ -->
+                    <Grid x:Name="FileActionsGrid" Margin="0,6,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+
+                        <Button Grid.Column="0" Style="{StaticResource NothingActionTile}" Click="SelectedDownload_Click">
+                            <StackPanel>
+                                <Border Width="42" Height="42" CornerRadius="21" Background="#EFEFED" HorizontalAlignment="Center">
+                                    <TextBlock Text="&#xE20C;" FontFamily="{StaticResource PhosphorFont}" FontSize="20"
+                                               Foreground="{StaticResource NothingInkBrush}"
+                                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                </Border>
+                                <TextBlock Text="СКАЧАТЬ" Style="{StaticResource NothingActionTileLabel}"/>
+                            </StackPanel>
+                        </Button>
+
+                        <Button Grid.Column="1" Style="{StaticResource NothingActionTile}" Click="SelectedRename_Click">
+                            <StackPanel>
+                                <Border Width="42" Height="42" CornerRadius="21" Background="#EFEFED" HorizontalAlignment="Center">
+                                    <TextBlock Text="&#xE3B4;" FontFamily="{StaticResource PhosphorFont}" FontSize="20"
+                                               Foreground="{StaticResource NothingInkBrush}"
+                                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                </Border>
+                                <TextBlock Text="ПЕРЕИМЕНОВАТЬ" Style="{StaticResource NothingActionTileLabel}" FontSize="9"/>
+                            </StackPanel>
+                        </Button>
+
+                        <Button Grid.Column="2" Style="{StaticResource NothingActionTile}" Click="SelectedDelete_Click">
+                            <StackPanel>
+                                <Border Width="42" Height="42" CornerRadius="21" Background="{StaticResource NothingRedSoftBrush}" HorizontalAlignment="Center">
+                                    <TextBlock Text="&#xE4A6;" FontFamily="{StaticResource PhosphorFont}" FontSize="20"
+                                               Foreground="{StaticResource NothingRedBrush}"
+                                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                </Border>
+                                <TextBlock Text="УДАЛИТЬ" Style="{StaticResource NothingActionTileLabel}"
+                                           Foreground="{StaticResource NothingRedBrush}"/>
+                            </StackPanel>
+                        </Button>
+
+                        <Button Grid.Column="3" Style="{StaticResource NothingActionTile}" Click="SelectedProperties_Click">
+                            <StackPanel>
+                                <Border Width="42" Height="42" CornerRadius="21" Background="#EFEFED" HorizontalAlignment="Center">
+                                    <TextBlock Text="&#xE2CE;" FontFamily="{StaticResource PhosphorFont}" FontSize="20"
+                                               Foreground="{StaticResource NothingInkBrush}"
+                                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                </Border>
+                                <TextBlock Text="СВОЙСТВА" Style="{StaticResource NothingActionTileLabel}"/>
+                            </StackPanel>
+                        </Button>
+                    </Grid>
+
+                    <!-- ДЕЙСТВИЯ С ПАПКОЙ -->
+                    <Grid x:Name="FolderActionsGrid" Margin="0,6,0,0" Visibility="Collapsed">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+
+                        <Button Grid.Column="0" Style="{StaticResource NothingActionTile}" Click="SelectedOpenFolder_Click">
+                            <StackPanel>
+                                <Border Width="42" Height="42" CornerRadius="21" Background="#EFEFED" HorizontalAlignment="Center">
+                                    <TextBlock Text="&#xE256;" FontFamily="{StaticResource PhosphorFont}" FontSize="20"
+                                               Foreground="{StaticResource NothingInkBrush}"
+                                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                </Border>
+                                <TextBlock Text="ОТКРЫТЬ" Style="{StaticResource NothingActionTileLabel}"/>
+                            </StackPanel>
+                        </Button>
+
+                        <Button Grid.Column="1" Style="{StaticResource NothingActionTile}" Click="SelectedDownloadAll_Click">
+                            <StackPanel>
+                                <Border Width="42" Height="42" CornerRadius="21" Background="#EFEFED" HorizontalAlignment="Center">
+                                    <TextBlock Text="&#xE20C;" FontFamily="{StaticResource PhosphorFont}" FontSize="20"
+                                               Foreground="{StaticResource NothingInkBrush}"
+                                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                </Border>
+                                <TextBlock Text="СКАЧАТЬ ВСЁ" Style="{StaticResource NothingActionTileLabel}" FontSize="9"/>
+                            </StackPanel>
+                        </Button>
+
+                        <Button Grid.Column="2" Style="{StaticResource NothingActionTile}" Click="SelectedRename_Click">
+                            <StackPanel>
+                                <Border Width="42" Height="42" CornerRadius="21" Background="#EFEFED" HorizontalAlignment="Center">
+                                    <TextBlock Text="&#xE3B4;" FontFamily="{StaticResource PhosphorFont}" FontSize="20"
+                                               Foreground="{StaticResource NothingInkBrush}"
+                                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                </Border>
+                                <TextBlock Text="ПЕРЕИМЕНОВАТЬ" Style="{StaticResource NothingActionTileLabel}" FontSize="9"/>
+                            </StackPanel>
+                        </Button>
+
+                        <Button Grid.Column="3" Style="{StaticResource NothingActionTile}" Click="SelectedDelete_Click">
+                            <StackPanel>
+                                <Border Width="42" Height="42" CornerRadius="21" Background="{StaticResource NothingRedSoftBrush}" HorizontalAlignment="Center">
+                                    <TextBlock Text="&#xE4A6;" FontFamily="{StaticResource PhosphorFont}" FontSize="20"
+                                               Foreground="{StaticResource NothingRedBrush}"
+                                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                </Border>
+                                <TextBlock Text="УДАЛИТЬ" Style="{StaticResource NothingActionTileLabel}"
+                                           Foreground="{StaticResource NothingRedBrush}"/>
+                            </StackPanel>
+                        </Button>
+                    </Grid>
                 </StackPanel>
-            </Button>
-        </Grid>
+            </Border>
+
+            <!-- ОСТРОВ ТЕКУЩЕЙ ПАПКИ -->
+            <Border x:Name="DirectoryIsland" Style="{StaticResource NothingFloatingCard}"
+                    Background="{StaticResource NothingGraphiteBrush}"
+                    BorderBrush="{StaticResource NothingBorderDarkBrush}"
+                    Margin="16,0,16,16">
+                <StackPanel>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel VerticalAlignment="Center">
+                            <TextBlock Text="ТЕКУЩАЯ ПАПКА" FontSize="10" FontFamily="Segoe UI Semibold"
+                                       Foreground="{StaticResource NothingMutedDarkBrush}"/>
+                            <TextBlock x:Name="DirectoryPathText" Text="диск /" FontSize="15" FontFamily="Segoe UI Semibold"
+                                       Foreground="{StaticResource NothingWhiteBrush}" Margin="0,3,0,0"
+                                       TextTrimming="CharacterEllipsis"/>
+                        </StackPanel>
+
+                        <Button Grid.Column="1" Style="{StaticResource NothingCloseButton}" Width="36" Height="36"
+                                Background="#14FFFFFF" Click="DirectoryCollapse_Click" VerticalAlignment="Center">
+                            <TextBlock Text="&#xE136;" FontFamily="{StaticResource PhosphorFont}" FontSize="16"
+                                       Foreground="{StaticResource NothingWhiteBrush}"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Button>
+                    </Grid>
+
+                    <Grid Margin="0,12,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+
+                        <Button Grid.Column="0" Style="{StaticResource NothingDarkPillButton}" Margin="0,0,4,0"
+                                Click="UploadFile_Click">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="&#xE4C0;" FontFamily="{StaticResource PhosphorFont}" FontSize="17"
+                                           Foreground="{StaticResource NothingWhiteBrush}" VerticalAlignment="Center"/>
+                                <TextBlock Text="ЗАГРУЗИТЬ" Style="{StaticResource NothingDarkPillLabel}"/>
+                            </StackPanel>
+                        </Button>
+
+                        <Button Grid.Column="1" Style="{StaticResource NothingDarkPillButton}" Margin="4,0,4,0"
+                                Click="CreateFolder_Click">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="&#xE258;" FontFamily="{StaticResource PhosphorFont}" FontSize="17"
+                                           Foreground="{StaticResource NothingWhiteBrush}" VerticalAlignment="Center"/>
+                                <TextBlock Text="СОЗДАТЬ" Style="{StaticResource NothingDarkPillLabel}"/>
+                            </StackPanel>
+                        </Button>
+
+                        <Button Grid.Column="2" Style="{StaticResource NothingDarkPillButton}" Margin="4,0,0,0"
+                                Click="RefreshFolder_Click">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="&#xE094;" FontFamily="{StaticResource PhosphorFont}" FontSize="17"
+                                           Foreground="{StaticResource NothingWhiteBrush}" VerticalAlignment="Center"/>
+                                <TextBlock Text="ОБНОВИТЬ" Style="{StaticResource NothingDarkPillLabel}"/>
+                            </StackPanel>
+                        </Button>
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <!-- СВЁРНУТЫЙ МИКРО-ОСТРОВ -->
+            <Border x:Name="DirectoryMicroIsland" Visibility="Collapsed" HorizontalAlignment="Center"
+                    Background="{StaticResource NothingGraphiteBrush}"
+                    BorderBrush="{StaticResource NothingBorderDarkBrush}" BorderThickness="1"
+                    CornerRadius="22" Height="44" Padding="16,0" Margin="0,0,0,16"
+                    Tap="DirectoryMicroIsland_Tap">
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock Text="&#xE24A;" FontFamily="{StaticResource PhosphorFont}" FontSize="16"
+                               Foreground="{StaticResource NothingWhiteBrush}" VerticalAlignment="Center"/>
+                    <TextBlock Text="ДЕЙСТВИЯ С ПАПКОЙ" FontSize="10" FontFamily="Segoe UI Semibold"
+                               Foreground="{StaticResource NothingWhiteBrush}" VerticalAlignment="Center" Margin="8,0,0,0"/>
+                    <TextBlock Text="&#xE13C;" FontFamily="{StaticResource PhosphorFont}" FontSize="13"
+                               Foreground="{StaticResource NothingMutedDarkBrush}" VerticalAlignment="Center" Margin="8,0,0,0"/>
+                </StackPanel>
+            </Border>
+        </StackPanel>
 
         <!-- ЭКРАН АВТОРИЗАЦИИ -->
         <Grid x:Name="AuthArea" Canvas.ZIndex="100" Background="Black">
