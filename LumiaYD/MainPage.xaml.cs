@@ -56,6 +56,8 @@ namespace LumiaYD
         private bool _suppressBackdropTap;
         private Action _dialogPrimaryAction;
         private Action _dialogSecondaryAction;
+        private bool _dialogInputOpen;
+        private Action<string> _dialogInputAction;
 
         private readonly DispatcherTimer _directoryCollapseTimer = new DispatcherTimer();
         private bool _directoryExpanded = true;
@@ -128,8 +130,23 @@ namespace LumiaYD
                 LoadCredentials();
             }
 
+            HandlePickerContinuations();
+        }
+
+        public void HandlePickerContinuations()
+        {
+            if (!_initialized)
+            {
+                return;
+            }
+
             var app = Application.Current as App;
-            if (app != null && app.FileSaveContinuationArgs != null)
+            if (app == null)
+            {
+                return;
+            }
+
+            if (app.FileSaveContinuationArgs != null)
             {
                 var args = app.FileSaveContinuationArgs;
                 app.FileSaveContinuationArgs = null;
@@ -142,6 +159,17 @@ namespace LumiaYD
                 {
                     _pendingDownloadFile = null;
                     ClearPendingDownload();
+                }
+            }
+
+            if (app.FileOpenContinuationArgs != null)
+            {
+                var openArgs = app.FileOpenContinuationArgs;
+                app.FileOpenContinuationArgs = null;
+
+                if (!string.IsNullOrEmpty(_login) && !string.IsNullOrEmpty(_password))
+                {
+                    ContinueFileOpenPicker(openArgs);
                 }
             }
         }
@@ -492,12 +520,12 @@ namespace LumiaYD
             AccountStorageFill.Width = AccountStorageTrack.ActualWidth * _storagePercent / 100.0;
         }
 
-        private void ShowNothingDialog(string title, string message, string primaryText, Action primaryAction,
+        private bool ShowNothingDialog(string title, string message, string primaryText, Action primaryAction,
                                        string secondaryText, Action secondaryAction, bool isDanger)
         {
             if (_dialogOpen)
             {
-                return;
+                return false;
             }
 
             _dialogOpen = true;
@@ -505,6 +533,9 @@ namespace LumiaYD
             _suppressBackdropTap = _dialogInsideAccountMenu;
             _dialogPrimaryAction = primaryAction;
             _dialogSecondaryAction = secondaryAction;
+            _dialogInputOpen = false;
+            _dialogInputAction = null;
+            _directoryCollapseTimer.Stop();
             App.Log("modal: show dialog, fromAccount=" + _dialogInsideAccountMenu);
 
             NothingDialogTitle.Text = title;
@@ -512,6 +543,10 @@ namespace LumiaYD
             NothingDialogPrimaryButton.Content = primaryText;
             NothingDialogPrimaryButton.Background = (SolidColorBrush)Application.Current.Resources[
                 isDanger ? "NothingRedBrush" : "NothingInkBrush"];
+
+            NothingDialogInputBorder.Visibility = Visibility.Collapsed;
+            NothingDialogError.Visibility = Visibility.Collapsed;
+            NothingDialogInput.Text = "";
 
             if (string.IsNullOrEmpty(secondaryText))
             {
@@ -557,7 +592,7 @@ namespace LumiaYD
                     }
                 };
                 swap.Begin();
-                return;
+                return true;
             }
 
             AccountMenuCard.Visibility = Visibility.Collapsed;
@@ -575,6 +610,31 @@ namespace LumiaYD
             AddOpacityAnimation(storyboard, ModalOverlay, 0, 1, 140);
             AddTranslateYAnimation(storyboard, NothingDialogCard, 0, 180);
             storyboard.Begin();
+            return true;
+        }
+
+        private void ShowInputDialog(string title, string message, string initialValue, string primaryText,
+                                     Action<string> action, bool isDanger)
+        {
+            if (!ShowNothingDialog(title, message, primaryText, null, "ОТМЕНА", null, isDanger))
+            {
+                return;
+            }
+
+            _dialogInputOpen = true;
+            _dialogInputAction = action;
+            NothingDialogInput.Text = initialValue ?? "";
+            NothingDialogInputBorder.Visibility = Visibility.Visible;
+            NothingDialogError.Visibility = Visibility.Collapsed;
+
+            Dispatcher.BeginInvoke(() =>
+            {
+                if (_dialogOpen && _dialogInputOpen && NothingDialogInput != null)
+                {
+                    NothingDialogInput.Focus();
+                    NothingDialogInput.SelectAll();
+                }
+            });
         }
 
         private void HideNothingDialog(bool primary)
@@ -591,6 +651,10 @@ namespace LumiaYD
             _dialogInsideAccountMenu = false;
             _dialogPrimaryAction = null;
             _dialogSecondaryAction = null;
+            _dialogInputOpen = false;
+            _dialogInputAction = null;
+            NothingDialogInput.Text = "";
+            NothingDialogError.Visibility = Visibility.Collapsed;
 
             if (!primary && fromAccountMenu)
             {
@@ -652,6 +716,7 @@ namespace LumiaYD
                 ModalOverlay.Visibility = Visibility.Collapsed;
                 SetModalBackgroundLocked(false);
                 ResetModalPositions();
+                RestartDirectoryCollapseTimer();
 
                 if (action != null)
                 {
@@ -668,7 +733,66 @@ namespace LumiaYD
 
         private void NothingDialogPrimary_Click(object sender, RoutedEventArgs e)
         {
+            if (_dialogInputOpen)
+            {
+                string value = (NothingDialogInput.Text ?? "").Trim();
+                string error = ValidateName(value);
+                if (error != null)
+                {
+                    NothingDialogError.Text = error;
+                    NothingDialogError.Visibility = Visibility.Visible;
+                    NothingDialogInput.Focus();
+                    return;
+                }
+
+                Action<string> inputAction = _dialogInputAction;
+                _dialogInputAction = null;
+                if (inputAction != null)
+                {
+                    _dialogPrimaryAction = delegate { inputAction(value); };
+                }
+            }
+
             HideNothingDialog(true);
+        }
+
+        private void NothingDialogInput_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+        {
+            if (e.Key == System.Windows.Input.Key.Enter)
+            {
+                e.Handled = true;
+                NothingDialogPrimary_Click(sender, new RoutedEventArgs());
+            }
+        }
+
+        private static string ValidateName(string name)
+        {
+            if (string.IsNullOrEmpty(name))
+            {
+                return "Имя не может быть пустым.";
+            }
+
+            if (name == "." || name == "..")
+            {
+                return "Такое имя недопустимо.";
+            }
+
+            if (name.Length > 255)
+            {
+                return "Имя слишком длинное.";
+            }
+
+            if (name.IndexOfAny(new[] { '/', '\\', ':', '*', '?', '"', '<', '>', '|' }) >= 0)
+            {
+                return "Имя содержит недопустимые символы: / \\ : * ? \" < > |";
+            }
+
+            if (name.EndsWith(".") || name.EndsWith(" "))
+            {
+                return "Имя не может заканчиваться точкой или пробелом.";
+            }
+
+            return null;
         }
 
         private void NothingDialogSecondary_Click(object sender, RoutedEventArgs e)
@@ -750,6 +874,8 @@ namespace LumiaYD
             _suppressBackdropTap = false;
             _dialogPrimaryAction = null;
             _dialogSecondaryAction = null;
+            _dialogInputOpen = false;
+            _dialogInputAction = null;
 
             ModalOverlay.Visibility = Visibility.Collapsed;
             SetModalBackgroundLocked(false);
@@ -1302,13 +1428,99 @@ namespace LumiaYD
 
         private void SelectedRename_Click(object sender, RoutedEventArgs e)
         {
-            ShowInfoDialog("ПЕРЕИМЕНОВАНИЕ", "Переименование объекта появится в следующем обновлении.");
+            YandexFileItem item = selectedItem;
+            if (item == null)
+            {
+                return;
+            }
+
+            ShowInputDialog(
+                "ПЕРЕИМЕНОВАТЬ",
+                item.IsFolder ? "Введите новое имя папки." : "Введите новое имя файла.",
+                item.Name,
+                "СОХРАНИТЬ",
+                delegate(string name) { RenameSelectedAsync(item, name); },
+                false);
+        }
+
+        private async void RenameSelectedAsync(YandexFileItem item, string newName)
+        {
+            var client = _webDav;
+            if (client == null || item == null)
+            {
+                return;
+            }
+
+            if (string.Equals(item.Name, newName, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            try
+            {
+                App.Log("rename start: " + item.Name + " -> " + newName);
+                await client.RenameAsync(item.Href, newName, item.IsFolder, CancellationToken.None);
+                HideSelectedIslandImmediate();
+                LoadFolder(currentPath);
+                ShowInfoDialog("ГОТОВО", "Объект переименован.");
+            }
+            catch (WebDavException ex)
+            {
+                App.Log("rename failed: " + ex.Message);
+                ShowInfoDialog("СБОЙ", "Не удалось переименовать объект:\n" + ex.Message);
+            }
+            catch (Exception ex)
+            {
+                App.Log("rename error: " + ex.Message);
+                ShowInfoDialog("СБОЙ", "Ошибка при переименовании:\n" + ex.Message);
+            }
         }
 
         private void SelectedDelete_Click(object sender, RoutedEventArgs e)
         {
-            string name = selectedItem != null ? selectedItem.Name : "объект";
-            ShowInfoDialog("УДАЛЕНИЕ", "Удаление «" + name + "» появится в следующем обновлении.");
+            YandexFileItem item = selectedItem;
+            if (item == null)
+            {
+                return;
+            }
+
+            ShowNothingDialog(
+                item.IsFolder ? "УДАЛИТЬ ПАПКУ?" : "УДАЛИТЬ ФАЙЛ?",
+                "«" + item.Name + "» будет удалён с Диска без возможности восстановления.",
+                "УДАЛИТЬ",
+                delegate { DeleteSelectedAsync(item); },
+                "ОТМЕНА",
+                null,
+                true);
+        }
+
+        private async void DeleteSelectedAsync(YandexFileItem item)
+        {
+            var client = _webDav;
+            if (client == null || item == null)
+            {
+                return;
+            }
+
+            try
+            {
+                App.Log("delete start: " + item.Name);
+                await client.DeleteAsync(item.Href, CancellationToken.None);
+                HideSelectedIslandImmediate();
+                LoadFolder(currentPath);
+                LoadQuotaAsync();
+                ShowInfoDialog("ГОТОВО", "Объект удалён с Диска.");
+            }
+            catch (WebDavException ex)
+            {
+                App.Log("delete failed: " + ex.Message);
+                ShowInfoDialog("СБОЙ", "Не удалось удалить объект:\n" + ex.Message);
+            }
+            catch (Exception ex)
+            {
+                App.Log("delete error: " + ex.Message);
+                ShowInfoDialog("СБОЙ", "Ошибка при удалении:\n" + ex.Message);
+            }
         }
 
         private void SelectedProperties_Click(object sender, RoutedEventArgs e)
@@ -1327,12 +1539,121 @@ namespace LumiaYD
 
         private void UploadFile_Click(object sender, RoutedEventArgs e)
         {
-            ShowInfoDialog("ЗАГРУЗИТЬ ФАЙЛ", "Загрузка файлов на Диск появится в следующем обновлении.");
+            RestartDirectoryCollapseTimer();
+
+            var picker = new FileOpenPicker();
+            picker.FileTypeFilter.Add("*");
+
+            try
+            {
+                picker.PickSingleFileAndContinue();
+            }
+            catch (Exception ex)
+            {
+                ShowInfoDialog("СБОЙ", "Не удалось открыть выбор файла:\n" + ex.Message);
+            }
+        }
+
+        public void ContinueFileOpenPicker(FileOpenPickerContinuationEventArgs args)
+        {
+            if (args.Files == null || args.Files.Count == 0)
+            {
+                ShowInfoDialog("ИНФО", "Файл не выбран.");
+                return;
+            }
+
+            StartUpload(args.Files[0]);
+        }
+
+        private async void StartUpload(StorageFile file)
+        {
+            var client = _webDav;
+            if (client == null || file == null)
+            {
+                return;
+            }
+
+            var transfer = CreateTransfer(file.Name, "Загрузка...");
+            transfer.IconPath = "M12 20 L12 8 M12 8 L7 13 M12 8 L17 13";
+            transfer.IconColor = "#0A0A0A";
+            _transfers.Add(transfer);
+
+            BeginDownloadActivity();
+            App.Log("upload start: " + file.Name);
+
+            try
+            {
+                await client.UploadFileAsync(currentPath, file, delegate(int percent)
+                {
+                    Deployment.Current.Dispatcher.BeginInvoke(() => { transfer.Progress = percent; });
+                }, CancellationToken.None);
+
+                transfer.StatusText = "На Диске";
+                transfer.Progress = 100;
+                App.Log("upload done: " + file.Name);
+
+                LoadFolder(currentPath);
+                LoadQuotaAsync();
+                ShowInfoDialog("ГОТОВО", "Файл «" + file.Name + "» загружен на Диск.");
+            }
+            catch (WebDavException ex)
+            {
+                transfer.StatusText = "Ошибка";
+                transfer.IconColor = "#E81123";
+                App.Log("upload failed: " + ex.Message);
+                ShowInfoDialog("СБОЙ", "Не удалось загрузить файл:\n" + ex.Message);
+            }
+            catch (Exception ex)
+            {
+                transfer.StatusText = "Ошибка";
+                transfer.IconColor = "#E81123";
+                App.Log("upload error: " + ex.Message);
+                ShowInfoDialog("СБОЙ", "Ошибка при загрузке файла:\n" + ex.Message);
+            }
+            finally
+            {
+                EndDownloadActivity();
+            }
         }
 
         private void CreateFolder_Click(object sender, RoutedEventArgs e)
         {
-            ShowInfoDialog("НОВАЯ ПАПКА", "Создание папки появится в следующем обновлении.");
+            RestartDirectoryCollapseTimer();
+
+            ShowInputDialog(
+                "НОВАЯ ПАПКА",
+                "Введите имя новой папки на Диске.",
+                "",
+                "СОЗДАТЬ",
+                delegate(string name) { CreateFolderAsync(name); },
+                false);
+        }
+
+        private async void CreateFolderAsync(string name)
+        {
+            var client = _webDav;
+            if (client == null)
+            {
+                return;
+            }
+
+            try
+            {
+                App.Log("mkdir start: " + name);
+                await client.CreateFolderAsync(currentPath, name, CancellationToken.None);
+                LoadFolder(currentPath);
+                ShowInfoDialog("ГОТОВО", "Папка «" + name + "» создана.");
+            }
+            catch (WebDavException ex)
+            {
+                App.Log("mkdir failed: " + ex.Message);
+                ShowInfoDialog("СБОЙ", "Не удалось создать папку:\n" + ex.Message);
+            }
+            catch (Exception ex)
+            {
+                App.Log("mkdir error: " + ex.Message);
+                ShowInfoDialog("СБОЙ", "Ошибка при создании папки:\n" + ex.Message);
+            }
         }
 
         private void RefreshFolder_Click(object sender, RoutedEventArgs e)

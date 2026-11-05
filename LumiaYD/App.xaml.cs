@@ -222,6 +222,8 @@ namespace LumiaYD
  */
         public FileSavePickerContinuationEventArgs FileSaveContinuationArgs { get; set; }
 
+        public FileOpenPickerContinuationEventArgs FileOpenContinuationArgs { get; set; }
+
         private void Application_ContractActivated(object sender, IActivatedEventArgs e)
         {
             var fileSaveArgs = e as FileSavePickerContinuationEventArgs;
@@ -229,6 +231,21 @@ namespace LumiaYD
             {
                 this.FileSaveContinuationArgs = fileSaveArgs;
             }
+
+            var fileOpenArgs = e as FileOpenPickerContinuationEventArgs;
+            if (fileOpenArgs != null)
+            {
+                this.FileOpenContinuationArgs = fileOpenArgs;
+            }
+
+            Deployment.Current.Dispatcher.BeginInvoke(() =>
+            {
+                var page = RootFrame != null ? RootFrame.Content as MainPage : null;
+                if (page != null)
+                {
+                    page.HandlePickerContinuations();
+                }
+            });
         }
 
         private const string DiagnosticsFileName = "diagnostics.log";

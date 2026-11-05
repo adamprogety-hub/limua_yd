@@ -7,6 +7,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Xml.Linq;
+using Windows.Storage;
 
 namespace LumiaYD
 {
@@ -69,6 +70,128 @@ namespace LumiaYD
             return request;
         }
 
+        public async Task DeleteAsync(string href, CancellationToken cancellationToken)
+        {
+            await SendSimpleRequestAsync(href, "DELETE", null, cancellationToken);
+        }
+
+        public async Task CreateFolderAsync(string parentPath, string name, CancellationToken cancellationToken)
+        {
+            string target = CombinePath(parentPath, name) + "/";
+            await SendSimpleRequestAsync(target, "MKCOL", null, cancellationToken);
+        }
+
+        public async Task RenameAsync(string href, string newName, bool isFolder, CancellationToken cancellationToken)
+        {
+            string parentPath = GetParentPath(href);
+            string target = CombinePath(parentPath, newName);
+            if (isFolder)
+            {
+                target += "/";
+            }
+
+            await SendSimpleRequestAsync(href, "MOVE", request =>
+            {
+                request.Headers["Destination"] = BuildUrl(target);
+                request.Headers["Overwrite"] = "F";
+            }, cancellationToken);
+        }
+
+        public async Task UploadFileAsync(string folderPath, StorageFile file, Action<int> progress,
+                                          CancellationToken cancellationToken)
+        {
+            if (file == null)
+            {
+                throw new ArgumentNullException("file");
+            }
+
+            cancellationToken.ThrowIfCancellationRequested();
+
+            string target = CombinePath(folderPath, file.Name);
+
+            using (Stream fileStream = await file.OpenStreamForReadAsync())
+            {
+                long totalBytes;
+                if (fileStream.CanSeek)
+                {
+                    totalBytes = fileStream.Length;
+                }
+                else
+                {
+                    var properties = await file.GetBasicPropertiesAsync();
+                    totalBytes = (long)properties.Size;
+                }
+
+                HttpWebRequest request = (HttpWebRequest)WebRequest.Create(BuildUrl(target));
+                request.Method = "PUT";
+                TryDisableWriteBuffering(request);
+                request.ContentLength = totalBytes;
+                request.UserAgent = UserAgent;
+                request.Headers["Authorization"] = MakeAuthHeader(_login, _password);
+
+                using (cancellationToken.Register(() =>
+                {
+                    try
+                    {
+                        request.Abort();
+                    }
+                    catch
+                    {
+                    }
+                }))
+                {
+                    try
+                    {
+                        using (Stream requestStream = await Task.Factory.FromAsync<Stream>(
+                            request.BeginGetRequestStream, request.EndGetRequestStream, null))
+                        {
+                            byte[] buffer = new byte[64 * 1024];
+                            long sentBytes = 0;
+                            int lastProgress = -1;
+                            int read;
+
+                            while ((read = await fileStream.ReadAsync(buffer, 0, buffer.Length)) > 0)
+                            {
+                                await requestStream.WriteAsync(buffer, 0, read);
+                                sentBytes += read;
+
+                                if (progress != null && totalBytes > 0)
+                                {
+                                    int percent = (int)Math.Min(100, sentBytes * 100 / totalBytes);
+                                    if (percent != lastProgress)
+                                    {
+                                        lastProgress = percent;
+                                        progress(percent);
+                                    }
+                                }
+                            }
+
+                            requestStream.Flush();
+                        }
+
+                        using (WebResponse response = await Task.Factory.FromAsync<WebResponse>(
+                            request.BeginGetResponse, request.EndGetResponse, null))
+                        {
+                        }
+
+                        if (progress != null)
+                        {
+                            progress(100);
+                        }
+                    }
+                    catch (WebException ex)
+                    {
+                        if (cancellationToken.IsCancellationRequested)
+                        {
+                            throw new OperationCanceledException(cancellationToken);
+                        }
+
+                        throw CreateWebDavException(ex);
+                    }
+                }
+            }
+        }
+
         public static string FormatSize(long bytes)
         {
             if (bytes < 0) return "—";
@@ -129,6 +252,94 @@ namespace LumiaYD
                     throw CreateWebDavException(ex);
                 }
             }
+        }
+
+        private async Task SendSimpleRequestAsync(string path, string method, Action<HttpWebRequest> configure,
+                                                  CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            HttpWebRequest request = (HttpWebRequest)WebRequest.Create(BuildUrl(path));
+            request.Method = method;
+            request.AllowReadStreamBuffering = true;
+            request.UserAgent = UserAgent;
+            request.Headers["Authorization"] = MakeAuthHeader(_login, _password);
+
+            if (configure != null)
+            {
+                configure(request);
+            }
+
+            using (cancellationToken.Register(() =>
+            {
+                try
+                {
+                    request.Abort();
+                }
+                catch
+                {
+                }
+            }))
+            {
+                try
+                {
+                    using (WebResponse response = await Task.Factory.FromAsync<WebResponse>(
+                        request.BeginGetResponse, request.EndGetResponse, null))
+                    {
+                    }
+                }
+                catch (WebException ex)
+                {
+                    if (cancellationToken.IsCancellationRequested)
+                    {
+                        throw new OperationCanceledException(cancellationToken);
+                    }
+
+                    throw CreateWebDavException(ex);
+                }
+            }
+        }
+
+        private static void TryDisableWriteBuffering(HttpWebRequest request)
+        {
+            try
+            {
+                var property = typeof(HttpWebRequest).GetProperty("AllowWriteStreamBuffering");
+                if (property != null && property.CanWrite)
+                {
+                    property.SetValue(request, false, null);
+                }
+            }
+            catch
+            {
+                // На некоторых сборках Silverlight свойство недоступно.
+            }
+        }
+
+        private static string CombinePath(string parentPath, string name)
+        {
+            if (string.IsNullOrEmpty(parentPath))
+            {
+                parentPath = "/";
+            }
+            else if (parentPath[0] != '/')
+            {
+                parentPath = "/" + parentPath;
+            }
+
+            return parentPath.TrimEnd('/') + "/" + Uri.EscapeDataString(name);
+        }
+
+        private static string GetParentPath(string href)
+        {
+            string trimmed = href.TrimEnd('/');
+            int slash = trimmed.LastIndexOf('/');
+            if (slash <= 0)
+            {
+                return "/";
+            }
+
+            return trimmed.Substring(0, slash + 1);
         }
 
         private static List<YandexFileItem> ParseFolder(string xml, string path)
