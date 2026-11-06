@@ -112,6 +112,7 @@
     </Compile>
     <Compile Include="YandexResource.cs" />
     <Compile Include="YandexWebDavClient.cs" />
+    <Compile Include="ZipArchiveWriter.cs" />
   </ItemGroup>
   <ItemGroup>
     <Reference Include="System.Core" />

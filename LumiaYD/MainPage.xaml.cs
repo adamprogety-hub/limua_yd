@@ -30,6 +30,7 @@ namespace LumiaYD
         private const string CurrentPathKey = "CurrentPath";
         private const string PendingDownloadNameKey = "PendingDownloadName";
         private const string PendingDownloadHrefKey = "PendingDownloadHref";
+        private const string PendingDownloadIsFolderKey = "PendingDownloadIsFolder";
         private const long DownloadChunkSize = 8L * 1024 * 1024;
         private const int DownloadMaxAttempts = 5;
 
@@ -219,6 +220,9 @@ namespace LumiaYD
         {
             string name = settings.Contains(PendingDownloadNameKey) ? settings[PendingDownloadNameKey] as string : null;
             string href = settings.Contains(PendingDownloadHrefKey) ? settings[PendingDownloadHrefKey] as string : null;
+            bool isFolder = settings.Contains(PendingDownloadIsFolderKey) &&
+                            settings[PendingDownloadIsFolderKey] is bool &&
+                            (bool)settings[PendingDownloadIsFolderKey];
 
             if (!string.IsNullOrEmpty(name) && !string.IsNullOrEmpty(href))
             {
@@ -226,7 +230,7 @@ namespace LumiaYD
                 {
                     Name = name,
                     Href = href,
-                    IsFolder = false,
+                    IsFolder = isFolder,
                     Info = ""
                 };
             }
@@ -244,6 +248,7 @@ namespace LumiaYD
             var settings = IsolatedStorageSettings.ApplicationSettings;
             settings[PendingDownloadNameKey] = file.Name;
             settings[PendingDownloadHrefKey] = file.Href;
+            settings[PendingDownloadIsFolderKey] = file.IsFolder;
             settings.Save();
         }
 
@@ -252,6 +257,7 @@ namespace LumiaYD
             var settings = IsolatedStorageSettings.ApplicationSettings;
             settings.Remove(PendingDownloadNameKey);
             settings.Remove(PendingDownloadHrefKey);
+            settings.Remove(PendingDownloadIsFolderKey);
             settings.Save();
         }
 
@@ -1423,7 +1429,38 @@ namespace LumiaYD
 
         private void SelectedDownloadAll_Click(object sender, RoutedEventArgs e)
         {
-            ShowInfoDialog("СКАЧАТЬ ВСЁ", "Скачивание папки целиком появится в следующем обновлении.");
+            YandexFileItem item = selectedItem;
+            if (item == null || !item.IsFolder)
+            {
+                return;
+            }
+
+            HideSelectedIslandImmediate();
+
+            string suggested = SanitizeFileName(item.Name);
+            if (string.IsNullOrEmpty(suggested))
+            {
+                suggested = "folder";
+            }
+
+            var picker = new FileSavePicker();
+            picker.SuggestedStartLocation = PickerLocationId.DocumentsLibrary;
+            picker.FileTypeChoices.Add("ZIP-архив", new List<string>() { ".zip" });
+            picker.SuggestedFileName = suggested;
+
+            _pendingDownloadFile = item;
+            SavePendingDownload(item);
+
+            try
+            {
+                picker.PickSaveFileAndContinue();
+            }
+            catch (Exception ex)
+            {
+                _pendingDownloadFile = null;
+                ClearPendingDownload();
+                ShowInfoDialog("СБОЙ", "Не удалось открыть выбор файла:\n" + ex.Message);
+            }
         }
 
         private void SelectedRename_Click(object sender, RoutedEventArgs e)
@@ -1486,7 +1523,9 @@ namespace LumiaYD
 
             ShowNothingDialog(
                 item.IsFolder ? "УДАЛИТЬ ПАПКУ?" : "УДАЛИТЬ ФАЙЛ?",
-                "«" + item.Name + "» будет удалён с Диска без возможности восстановления.",
+                item.IsFolder
+                    ? "Папка «" + item.Name + "» будет удалена с Диска."
+                    : "Файл «" + item.Name + "» будет удалён с Диска.",
                 "УДАЛИТЬ",
                 delegate { DeleteSelectedAsync(item); },
                 "ОТМЕНА",
@@ -1575,7 +1614,7 @@ namespace LumiaYD
 
             var transfer = CreateTransfer(file.Name, "Загрузка...");
             transfer.IconPath = "M12 20 L12 8 M12 8 L7 13 M12 8 L17 13";
-            transfer.IconColor = "#0A0A0A";
+            transfer.IconColor = "#F6F6F4";
             _transfers.Add(transfer);
 
             BeginDownloadActivity();
@@ -1828,10 +1867,22 @@ namespace LumiaYD
                 _pendingDownloadFile = null;
                 ClearPendingDownload();
 
-                var transfer = CreateTransfer(fileToDownload.Name, "Скачивание...");
+                string transferName = fileToDownload.IsFolder
+                    ? fileToDownload.Name + ".zip"
+                    : fileToDownload.Name;
+                var transfer = CreateTransfer(
+                    transferName,
+                    fileToDownload.IsFolder ? "Подготовка архива..." : "Скачивание...");
                 _transfers.Add(transfer);
 
-                StartDownloadToStorageFile(fileToDownload, args.File, transfer);
+                if (fileToDownload.IsFolder)
+                {
+                    StartFolderDownloadToStorageFile(fileToDownload, args.File, transfer);
+                }
+                else
+                {
+                    StartDownloadToStorageFile(fileToDownload, args.File, transfer);
+                }
             }
             else
             {
@@ -1839,6 +1890,214 @@ namespace LumiaYD
                 ClearPendingDownload();
                 ShowInfoDialog("ИНФО", "Скачивание отменено");
             }
+        }
+
+        private async void StartFolderDownloadToStorageFile(YandexFileItem folder, StorageFile targetFile,
+                                                          TransferItem transfer)
+        {
+            var client = _webDav;
+            if (client == null || folder == null || targetFile == null)
+            {
+                transfer.StatusText = "Ошибка авторизации";
+                transfer.IconColor = "#E81123";
+                return;
+            }
+
+            BeginDownloadActivity();
+            App.Log("folder download start: " + folder.Name);
+
+            try
+            {
+                transfer.StatusText = "Подготовка архива...";
+                List<FolderZipEntry> entries = await CollectFolderZipEntriesAsync(client, folder, transfer);
+
+                int totalFiles = 0;
+                foreach (FolderZipEntry entry in entries)
+                {
+                    if (!entry.IsDirectory)
+                    {
+                        totalFiles++;
+                    }
+                }
+
+                App.Log("folder download prepared: " + folder.Name + ", files=" + totalFiles);
+
+                string rootName = SanitizeZipSegment(folder.Name);
+                if (string.IsNullOrEmpty(rootName))
+                {
+                    rootName = "folder";
+                }
+
+                using (Stream output = await targetFile.OpenStreamForWriteAsync())
+                {
+                    output.SetLength(0);
+                    output.Seek(0, SeekOrigin.Begin);
+
+                    using (var zip = new ZipArchiveWriter(output))
+                    {
+                        zip.AddDirectory(rootName + "/");
+
+                        int completedFiles = 0;
+
+                        foreach (FolderZipEntry entry in entries)
+                        {
+                            if (entry.IsDirectory)
+                            {
+                                zip.AddDirectory(entry.EntryPath);
+                                continue;
+                            }
+
+                            transfer.StatusText = "Скачивание: " + entry.Item.Name;
+
+                            HttpWebRequest request = client.CreateDownloadRequest(entry.Item.Href);
+
+                            using (WebResponse response = await Task.Factory.FromAsync<WebResponse>(
+                                request.BeginGetResponse, request.EndGetResponse, null))
+                            using (Stream responseStream = response.GetResponseStream())
+                            using (Stream entryStream = zip.BeginEntry(entry.EntryPath))
+                            {
+                                byte[] buffer = new byte[65536];
+                                int read;
+
+                                while ((read = await responseStream.ReadAsync(buffer, 0, buffer.Length)) > 0)
+                                {
+                                    entryStream.Write(buffer, 0, read);
+                                }
+                            }
+
+                            completedFiles++;
+
+                            if (totalFiles > 0)
+                            {
+                                transfer.Progress = completedFiles * 100.0 / totalFiles;
+                            }
+                        }
+
+                        zip.Finish();
+                    }
+
+                    await output.FlushAsync();
+                }
+
+                transfer.StatusText = "Архив готов";
+                transfer.Progress = 100;
+                App.Log("folder download done: " + folder.Name + ", files=" + totalFiles);
+                ShowInfoDialog("ГОТОВО", "Папка «" + folder.Name + "» сохранена в ZIP-архив.\nФайлов: " + totalFiles + ".");
+            }
+            catch (Exception ex)
+            {
+                transfer.StatusText = "Ошибка";
+                transfer.IconColor = "#E81123";
+                App.Log("folder download failed: " + folder.Name + ": " + ex);
+                ShowInfoDialog("СБОЙ", "Не удалось скачать папку целиком:\n" + ex.Message +
+                                        "\n\nАрхив может быть неполным.");
+            }
+            finally
+            {
+                EndDownloadActivity();
+            }
+        }
+
+        private async Task<List<FolderZipEntry>> CollectFolderZipEntriesAsync(YandexWebDavClient client,
+                                                                              YandexFileItem folder,
+                                                                              TransferItem transfer)
+        {
+            var result = new List<FolderZipEntry>();
+            var queue = new Queue<KeyValuePair<string, string>>();
+            var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            string rootName = SanitizeZipSegment(folder.Name);
+            if (string.IsNullOrEmpty(rootName))
+            {
+                rootName = "folder";
+            }
+
+            visited.Add(folder.Href.TrimEnd('/'));
+            queue.Enqueue(new KeyValuePair<string, string>(folder.Href, rootName));
+
+            int foldersScanned = 0;
+
+            while (queue.Count > 0)
+            {
+                KeyValuePair<string, string> current = queue.Dequeue();
+                List<YandexFileItem> items = await client.GetFolderAsync(current.Key, CancellationToken.None);
+
+                foldersScanned++;
+                transfer.StatusText = "Подготовка: папок " + foldersScanned;
+
+                foreach (YandexFileItem child in items)
+                {
+                    string childName = SanitizeZipSegment(child.Name);
+                    if (string.IsNullOrEmpty(childName))
+                    {
+                        continue;
+                    }
+
+                    string entryPath = current.Value + "/" + childName;
+
+                    if (child.IsFolder)
+                    {
+                        string childHref = child.Href.TrimEnd('/');
+                        if (!visited.Add(childHref))
+                        {
+                            continue;
+                        }
+
+                        result.Add(new FolderZipEntry
+                        {
+                            Item = child,
+                            EntryPath = entryPath + "/",
+                            IsDirectory = true
+                        });
+
+                        queue.Enqueue(new KeyValuePair<string, string>(child.Href, entryPath));
+                    }
+                    else
+                    {
+                        result.Add(new FolderZipEntry
+                        {
+                            Item = child,
+                            EntryPath = entryPath,
+                            IsDirectory = false
+                        });
+                    }
+                }
+            }
+
+            return result;
+        }
+
+        private static string SanitizeZipSegment(string name)
+        {
+            if (string.IsNullOrWhiteSpace(name))
+            {
+                return "";
+            }
+
+            var builder = new StringBuilder(name.Length);
+
+            foreach (char c in name.Trim())
+            {
+                char value = c;
+
+                if (value == '/' || value == '\\' || value == ':' || value == '*' ||
+                    value == '?' || value == '"' || value == '<' || value == '>' || value == '|' ||
+                    char.IsControl(value))
+                {
+                    value = '_';
+                }
+
+                builder.Append(value);
+            }
+
+            return builder.ToString().TrimEnd('.', ' ');
+        }
+
+        private sealed class FolderZipEntry
+        {
+            public YandexFileItem Item;
+            public string EntryPath;
+            public bool IsDirectory;
         }
 
         private async void StartDownloadToStorageFile(YandexFileItem file, StorageFile targetFile, TransferItem transfer)
