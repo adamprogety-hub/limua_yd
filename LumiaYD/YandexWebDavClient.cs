@@ -395,6 +395,7 @@ namespace LumiaYD
                     Name = displayName,
                     Info = info,
                     Href = normalizedHref,
+                    IconGlyph = isFolder ? "\uE24A" : GetFileGlyph(displayName),
                     IsFolder = isFolder
                 });
             }
@@ -403,6 +404,70 @@ namespace LumiaYD
                 .OrderByDescending(item => item.IsFolder)
                 .ThenBy(item => item.Name, StringComparer.CurrentCultureIgnoreCase)
                 .ToList();
+        }
+
+        private static string GetFileGlyph(string name)
+        {
+            string extension = Path.GetExtension(name ?? "").TrimStart('.').ToLowerInvariant();
+
+            switch (extension)
+            {
+                case "jpg":
+                case "jpeg":
+                case "png":
+                case "gif":
+                case "bmp":
+                case "tif":
+                case "tiff":
+                case "webp":
+                case "heic":
+                    return "\uEA24";
+                case "mp3":
+                case "flac":
+                case "wav":
+                case "aac":
+                case "ogg":
+                case "m4a":
+                case "wma":
+                    return "\uEA20";
+                case "mp4":
+                case "mkv":
+                case "avi":
+                case "mov":
+                case "wmv":
+                case "webm":
+                case "3gp":
+                    return "\uEA22";
+                case "zip":
+                case "rar":
+                case "7z":
+                case "tar":
+                case "gz":
+                case "bz2":
+                    return "\uEB2A";
+                case "pdf":
+                    return "\uE702";
+                case "doc":
+                case "docx":
+                case "rtf":
+                case "odt":
+                    return "\uEB1E";
+                case "xls":
+                case "xlsx":
+                case "csv":
+                case "ods":
+                    return "\uEB22";
+                case "ppt":
+                case "pptx":
+                case "odp":
+                    return "\uEB20";
+                case "txt":
+                case "md":
+                case "log":
+                    return "\uE23A";
+                default:
+                    return "\uE230";
+            }
         }
 
         private static QuotaInfo ParseQuota(string xml)

@@ -61,9 +61,10 @@ namespace LumiaYD
         private Action<string> _dialogInputAction;
 
         private readonly DispatcherTimer _directoryCollapseTimer = new DispatcherTimer();
-        private bool _directoryExpanded = true;
+        private bool _directoryExpanded = false;
         private bool _selectedIslandOpen;
         private int _selectedIslandVersion;
+        private DateTime _suppressTapUntil;
 
         public MainPage()
         {
@@ -915,7 +916,7 @@ namespace LumiaYD
 
             selectedItem = null;
             _selectedIslandOpen = false;
-            _directoryExpanded = true;
+            _directoryExpanded = false;
             UpdateBottomIslandsVisibility();
 
             LoadFolder(currentPath);
@@ -963,6 +964,7 @@ namespace LumiaYD
             int requestId = _folderRequestId;
 
             currentPath = path;
+            DirectoryRenameButton.Visibility = path == "/" ? Visibility.Collapsed : Visibility.Visible;
             string pretty = Uri.UnescapeDataString(path).Trim('/');
             string prettyPath = pretty == "" ? "диск /" : "диск / " + pretty.Replace("/", " / ");
             CurrentPathText.Text = pretty == "" ? "диск / ЗАГРУЗКА..." : "диск / " + pretty + " ЗАГРУЗКА...";
@@ -972,7 +974,9 @@ namespace LumiaYD
             {
                 HideSelectedIslandImmediate();
             }
-            ShowDirectoryIsland();
+            ApplyBottomIslandState();
+            UpdateBottomIslandsPadding();
+            RestartDirectoryCollapseTimer();
 
             try
             {
@@ -989,6 +993,7 @@ namespace LumiaYD
                         Name = "..",
                         Info = "подняться на уровень вверх",
                         Href = GetParentPath(path),
+                        IconGlyph = "\uE24A",
                         IsFolder = true
                     });
                 }
@@ -1097,14 +1102,30 @@ namespace LumiaYD
 
         private void FilesListBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-            YandexFileItem item = FilesListBox.SelectedItem as YandexFileItem;
-            FilesListBox.SelectedIndex = -1;
+            if (FilesListBox.SelectedIndex != -1)
+            {
+                FilesListBox.SelectedIndex = -1;
+            }
+        }
+
+        private void FileRow_Tap(object sender, System.Windows.Input.GestureEventArgs e)
+        {
+            if (DateTime.UtcNow < _suppressTapUntil)
+            {
+                e.Handled = true;
+                return;
+            }
+
+            var element = sender as FrameworkElement;
+            YandexFileItem item = element != null ? element.DataContext as YandexFileItem : null;
             if (item == null)
             {
                 return;
             }
 
-            if (item.Name == "..")
+            e.Handled = true;
+
+            if (item.Name == ".." || item.IsFolder)
             {
                 LoadFolder(item.Href);
                 return;
@@ -1123,17 +1144,25 @@ namespace LumiaYD
         {
             try
             {
-                var item = ((FrameworkElement)e.OriginalSource).DataContext as YandexFileItem;
+                YandexFileItem item = GetGestureItem(e);
                 if (item == null || item.Name == "..")
                 {
                     return;
                 }
 
+                _suppressTapUntil = DateTime.UtcNow.AddMilliseconds(800);
+                e.Handled = true;
                 ShowSelectedIsland(item);
             }
             catch
             {
             }
+        }
+
+        private static YandexFileItem GetGestureItem(System.Windows.Input.GestureEventArgs e)
+        {
+            var element = e.OriginalSource as FrameworkElement;
+            return element != null ? element.DataContext as YandexFileItem : null;
         }
 
         private void ShowSelectedIsland(YandexFileItem item)
@@ -1147,12 +1176,14 @@ namespace LumiaYD
             SelectedIslandSubtitle.Text = item.IsFolder
                 ? "ПАПКА"
                 : ("ФАЙЛ" + (string.IsNullOrEmpty(item.Info) ? "" : " · " + item.Info.ToUpperInvariant()));
-            SelectedIslandTypeIcon.Text = item.IsFolder ? "\uE24A" : "\uE230";
+            SelectedIslandTypeIcon.Text = string.IsNullOrEmpty(item.IconGlyph)
+                ? (item.IsFolder ? "\uE24A" : "\uE230")
+                : item.IconGlyph;
 
             FileActionsGrid.Visibility = item.IsFolder ? Visibility.Collapsed : Visibility.Visible;
             FolderActionsGrid.Visibility = item.IsFolder ? Visibility.Visible : Visibility.Collapsed;
 
-            CollapseDirectoryIsland();
+            HideDirectoryIslandsForSelection();
             ApplyDimming(item);
 
             SelectedIsland.Visibility = Visibility.Visible;
@@ -1174,6 +1205,26 @@ namespace LumiaYD
 
             _directoryCollapseTimer.Stop();
             UpdateBottomIslandsPadding();
+            ScrollSelectedItemIntoView(item);
+        }
+
+        private void ScrollSelectedItemIntoView(YandexFileItem item)
+        {
+            if (item == null)
+            {
+                return;
+            }
+
+            Dispatcher.BeginInvoke(() =>
+            {
+                if (!_selectedIslandOpen || selectedItem != item)
+                {
+                    return;
+                }
+
+                FilesListBox.UpdateLayout();
+                FilesListBox.ScrollIntoView(item);
+            });
         }
 
         private void HideSelectedIsland()
@@ -1202,7 +1253,7 @@ namespace LumiaYD
                 SelectedIsland.IsHitTestVisible = true;
                 selectedItem = null;
                 ClearDimming();
-                ShowDirectoryIsland();
+                ApplyBottomIslandState();
                 UpdateBottomIslandsPadding();
             };
             storyboard.Begin();
@@ -1216,7 +1267,7 @@ namespace LumiaYD
             SelectedIsland.IsHitTestVisible = true;
             selectedItem = null;
             ClearDimming();
-            ShowDirectoryIsland();
+            ApplyBottomIslandState();
             UpdateBottomIslandsPadding();
         }
 
@@ -1228,9 +1279,26 @@ namespace LumiaYD
                 return;
             }
 
+            Brush selectedBackground = (Brush)Application.Current.Resources["NothingWhiteBrush"];
+            Brush selectedName = (Brush)Application.Current.Resources["NothingInkBrush"];
+            Brush selectedInfo = (Brush)Application.Current.Resources["NothingMutedLightBrush"];
+            Brush selectedBorder = new SolidColorBrush(Colors.Transparent);
+
             foreach (YandexFileItem item in items)
             {
-                item.DimOpacity = item == selected ? 1.0 : 0.32;
+                if (item == selected)
+                {
+                    item.DimOpacity = 1.0;
+                    item.RowBackground = selectedBackground;
+                    item.RowBorderBrush = selectedBorder;
+                    item.RowNameBrush = selectedName;
+                    item.RowInfoBrush = selectedInfo;
+                }
+                else
+                {
+                    item.DimOpacity = 0.32;
+                    item.ResetRowStyle();
+                }
             }
         }
 
@@ -1245,6 +1313,7 @@ namespace LumiaYD
             foreach (YandexFileItem item in items)
             {
                 item.DimOpacity = 1.0;
+                item.ResetRowStyle();
             }
         }
 
@@ -1273,8 +1342,10 @@ namespace LumiaYD
         private void ApplyBottomIslandState()
         {
             SelectedIsland.Visibility = _selectedIslandOpen ? Visibility.Visible : Visibility.Collapsed;
-            DirectoryIsland.Visibility = _directoryExpanded ? Visibility.Visible : Visibility.Collapsed;
-            DirectoryMicroIsland.Visibility = _directoryExpanded ? Visibility.Collapsed : Visibility.Visible;
+
+            bool showDirectory = !_selectedIslandOpen;
+            DirectoryIsland.Visibility = (showDirectory && _directoryExpanded) ? Visibility.Visible : Visibility.Collapsed;
+            DirectoryMicroIsland.Visibility = (showDirectory && !_directoryExpanded) ? Visibility.Visible : Visibility.Collapsed;
         }
 
         private void ResetBottomIslands()
@@ -1282,7 +1353,7 @@ namespace LumiaYD
             _directoryCollapseTimer.Stop();
             _selectedIslandOpen = false;
             _selectedIslandVersion++;
-            _directoryExpanded = true;
+            _directoryExpanded = false;
             selectedItem = null;
 
             BottomIslands.Visibility = Visibility.Collapsed;
@@ -1307,11 +1378,11 @@ namespace LumiaYD
             {
                 if (_selectedIslandOpen)
                 {
-                    bottom = _directoryExpanded ? 326 : 240;
+                    bottom = 180;
                 }
                 else
                 {
-                    bottom = _directoryExpanded ? 152 : 68;
+                    bottom = _directoryExpanded ? (currentPath == "/" ? 152 : 208) : 68;
                 }
             }
 
@@ -1320,6 +1391,11 @@ namespace LumiaYD
 
         private void ShowDirectoryIsland()
         {
+            if (_selectedIslandOpen)
+            {
+                return;
+            }
+
             bool wasVisible = DirectoryIsland.Visibility == Visibility.Visible;
             _directoryExpanded = true;
 
@@ -1367,6 +1443,14 @@ namespace LumiaYD
             UpdateBottomIslandsPadding();
         }
 
+        private void HideDirectoryIslandsForSelection()
+        {
+            _directoryExpanded = false;
+            _directoryCollapseTimer.Stop();
+            DirectoryIsland.Visibility = Visibility.Collapsed;
+            DirectoryMicroIsland.Visibility = Visibility.Collapsed;
+        }
+
         private void RestartDirectoryCollapseTimer()
         {
             _directoryCollapseTimer.Stop();
@@ -1396,6 +1480,67 @@ namespace LumiaYD
         {
             e.Handled = true;
             ShowDirectoryIsland();
+        }
+
+        private void DirectoryRename_Click(object sender, RoutedEventArgs e)
+        {
+            RestartDirectoryCollapseTimer();
+
+            if (_webDav == null || currentPath == "/")
+            {
+                return;
+            }
+
+            string trimmed = currentPath.TrimEnd('/');
+            int slash = trimmed.LastIndexOf('/');
+            string currentName = slash >= 0 ? Uri.UnescapeDataString(trimmed.Substring(slash + 1)) : "";
+
+            ShowInputDialog(
+                "ПЕРЕИМЕНОВАТЬ ПАПКУ",
+                "Введите новое имя текущей папки.",
+                currentName,
+                "СОХРАНИТЬ",
+                delegate(string name) { RenameCurrentFolderAsync(name); },
+                false);
+        }
+
+        private async void RenameCurrentFolderAsync(string newName)
+        {
+            var client = _webDav;
+            string oldPath = currentPath;
+            if (client == null || string.IsNullOrEmpty(oldPath) || oldPath == "/")
+            {
+                return;
+            }
+
+            string trimmed = oldPath.TrimEnd('/');
+            int slash = trimmed.LastIndexOf('/');
+            string oldName = slash >= 0 ? Uri.UnescapeDataString(trimmed.Substring(slash + 1)) : "";
+            if (string.Equals(oldName, newName, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            string parent = GetParentPath(oldPath);
+            string newPath = parent.TrimEnd('/') + "/" + Uri.EscapeDataString(newName) + "/";
+
+            try
+            {
+                App.Log("rename folder start: " + oldPath + " -> " + newPath);
+                await client.RenameAsync(oldPath, newName, true, CancellationToken.None);
+                LoadFolder(newPath);
+                ShowInfoDialog("ГОТОВО", "Папка переименована.");
+            }
+            catch (WebDavException ex)
+            {
+                App.Log("rename folder failed: " + ex.Message);
+                ShowInfoDialog("СБОЙ", "Не удалось переименовать папку:\n" + ex.Message);
+            }
+            catch (Exception ex)
+            {
+                App.Log("rename folder error: " + ex.Message);
+                ShowInfoDialog("СБОЙ", "Ошибка при переименовании папки:\n" + ex.Message);
+            }
         }
 
         private void SelectedIslandClose_Click(object sender, RoutedEventArgs e)
