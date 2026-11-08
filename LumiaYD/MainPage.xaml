@@ -1,64 +1,62 @@
-﻿<phone:PhoneApplicationPage
-x:Class="LumiaYD.MainPage"
-xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-xmlns:phone="clr-namespace:Microsoft.Phone.Controls;assembly=Microsoft.Phone"
-xmlns:shell="clr-namespace:Microsoft.Phone.Shell;assembly=Microsoft.Phone"
-xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-mc:Ignorable="d"
-FontFamily="{StaticResource PhoneFontFamilyNormal}"
-FontSize="{StaticResource PhoneFontSizeNormal}"
-Foreground="{StaticResource PhoneForegroundBrush}"
-SupportedOrientations="Portrait" Orientation="Portrait"
-shell:SystemTray.IsVisible="True">
+<phone:PhoneApplicationPage
+    x:Class="LumiaYD.MainPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:phone="clr-namespace:Microsoft.Phone.Controls;assembly=Microsoft.Phone"
+    xmlns:shell="clr-namespace:Microsoft.Phone.Shell;assembly=Microsoft.Phone"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d"
+    FontFamily="{StaticResource PhoneFontFamilyNormal}"
+    FontSize="{StaticResource PhoneFontSizeNormal}"
+    Foreground="{StaticResource PhoneForegroundBrush}"
+    SupportedOrientations="Portrait" Orientation="Portrait"
+    shell:SystemTray.IsVisible="True">
 
     <phone:PhoneApplicationPage.Resources>
+        <!-- Шаблон строки передачи (Metro UI: плоская строка, тонкий прогресс-бар, воздушная иконка) -->
         <DataTemplate x:Key="TransferRowTemplate">
-            <Border Background="{StaticResource NothingGraphiteBrush}"
-                    BorderBrush="{StaticResource NothingBorderDarkBrush}" BorderThickness="1"
-                    CornerRadius="20" Padding="16,14" Margin="0,0,0,10"
+            <Border Background="Transparent"
+                    BorderBrush="{StaticResource MetroDividerBrush}" BorderThickness="0,0,0,1"
+                    Padding="24,12"
                     Tap="TransferRow_Tap">
                 <Grid>
                     <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="44"/>
+                        <ColumnDefinition Width="36"/>
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
 
-                    <Border Width="44" Height="44" CornerRadius="14"
-                            Background="{StaticResource NothingGraphiteRaisedBrush}"
-                            VerticalAlignment="Top">
-                        <TextBlock Text="{Binding IconGlyph}" FontFamily="{StaticResource PhosphorFont}"
-                                   FontSize="22" Foreground="{Binding IconBrush}"
-                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                    </Border>
+                    <!-- Воздушная иконка передачи (без рамок и фона) -->
+                    <TextBlock Text="{Binding IconGlyph}" FontFamily="{StaticResource PhosphorFont}"
+                               FontSize="24" Foreground="{Binding IconBrush}"
+                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
 
-                    <StackPanel Grid.Column="1" Margin="12,0,12,0" VerticalAlignment="Center">
-                        <TextBlock Text="{Binding FileName}" FontSize="19"
-                                   Foreground="{StaticResource NothingWhiteBrush}"
+                    <StackPanel Grid.Column="1" Margin="14,0,12,0" VerticalAlignment="Center">
+                        <TextBlock Text="{Binding FileName}" FontSize="18"
+                                   Foreground="#FFFFFF"
                                    FontFamily="Segoe UI Semilight" TextWrapping="NoWrap"
                                    TextTrimming="WordEllipsis"/>
                         <TextBlock Text="{Binding TargetText}" FontSize="11"
-                                   Foreground="{StaticResource NothingMutedDarkBrush}"
-                                   FontFamily="Segoe UI Semibold" Margin="0,2,0,0"
+                                   Foreground="{StaticResource MetroMutedBrush}"
+                                   FontFamily="Segoe UI" Margin="0,2,0,0"
                                    TextWrapping="NoWrap" TextTrimming="WordEllipsis"/>
-                        <ProgressBar Value="{Binding Progress}" Maximum="100" Height="4"
-                                     Margin="0,8,0,0" Foreground="{StaticResource NothingWhiteBrush}"
-                                     Background="{StaticResource NothingBorderDarkBrush}"
+                        <ProgressBar Value="{Binding Progress}" Maximum="100" Height="2"
+                                     Margin="0,6,0,0" Foreground="#FFFFFF"
+                                     Background="{StaticResource MetroSubtleBorderBrush}"
                                      BorderThickness="0"/>
-                        <TextBlock Text="{Binding StatusText}" FontSize="12"
-                                   Foreground="{StaticResource NothingMutedDarkBrush}"
-                                   FontFamily="Segoe UI" Margin="0,4,0,0"
+                        <TextBlock Text="{Binding StatusText}" FontSize="11"
+                                   Foreground="{StaticResource MetroMutedBrush}"
+                                   FontFamily="Segoe UI" Margin="0,3,0,0"
                                    TextWrapping="NoWrap" TextTrimming="WordEllipsis"/>
                     </StackPanel>
 
                     <StackPanel Grid.Column="2" VerticalAlignment="Center" HorizontalAlignment="Right">
                         <TextBlock Text="{Binding ProgressText}" FontSize="13"
-                                   Foreground="{StaticResource NothingWhiteBrush}"
+                                   Foreground="#FFFFFF"
                                    FontFamily="Segoe UI Semibold" HorizontalAlignment="Right"/>
                         <TextBlock Text="&#xE13A;" FontFamily="{StaticResource PhosphorFont}" FontSize="12"
-                                   Foreground="{StaticResource NothingMutedDarkBrush}"
+                                   Foreground="#555555"
                                    HorizontalAlignment="Right" Margin="0,4,0,0"/>
                     </StackPanel>
                 </Grid>
@@ -68,7 +66,7 @@ shell:SystemTray.IsVisible="True">
 
     <Grid x:Name="LayoutRoot" Background="Black">
 
-        <!-- ГЛАВНЫЙ ЭКРАН -->
+        <!-- ГЛАВНЫЙ ЭКРАН (METRO PIVOT) -->
         <phone:Pivot x:Name="MainPivot" Title="ЯНДЕКС ДИСК" Visibility="Collapsed" Foreground="White" SelectionChanged="MainPivot_SelectionChanged">
 
             <!-- ВКЛАДКА 1: ОБЛАКО -->
@@ -79,12 +77,12 @@ shell:SystemTray.IsVisible="True">
                         <RowDefinition Height="*"/>
                     </Grid.RowDefinitions>
 
-                    <!-- Хлебные крошки -->
-                    <Border Grid.Row="0" BorderBrush="#333333" BorderThickness="0,0,0,1" Margin="12,0,12,12">
-                        <TextBlock x:Name="CurrentPathText" Text="диск /" Foreground="#999999" FontSize="20" Margin="0,8,0,12" FontFamily="Segoe UI Semibold"/>
+                    <!-- Хлебные крошки текущего пути -->
+                    <Border Grid.Row="0" BorderBrush="{StaticResource MetroDividerBrush}" BorderThickness="0,0,0,1" Margin="24,0,24,6">
+                        <TextBlock x:Name="CurrentPathText" Text="диск /" Foreground="{StaticResource MetroMutedBrush}" FontSize="18" Margin="0,4,0,8" FontFamily="Segoe UI Semibold"/>
                     </Border>
 
-                    <!-- Список файлов -->
+                    <!-- Список файлов (Metro UI: чистые строки, воздушные иконки без рамок) -->
                     <ListBox x:Name="FilesListBox" Grid.Row="1" SelectionChanged="FilesListBox_SelectionChanged"
                              Hold="FilesListBox_Hold" Background="Transparent" BorderThickness="0"
                              Padding="0" HorizontalContentAlignment="Stretch"
@@ -115,33 +113,26 @@ shell:SystemTray.IsVisible="True">
                         <ListBox.ItemTemplate>
                             <DataTemplate>
                                 <Border BorderBrush="{Binding RowBorderBrush}" BorderThickness="0,0,0,1"
-                                        Background="Transparent"
+                                        Background="{Binding RowBackground}"
                                         Opacity="{Binding DimOpacity}" Tap="FileRow_Tap">
-                                    <Border Background="{Binding RowBackground}"
-                                            Padding="24,16,24,16">
-                                        <Grid>
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="40"/>
-                                                <ColumnDefinition Width="*"/>
-                                            </Grid.ColumnDefinitions>
+                                    <Grid Margin="24,14,24,14">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="36"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
 
-                                            <Border Width="40" Height="40" CornerRadius="12"
-                                                    Background="{StaticResource NothingGraphiteRaisedBrush}"
-                                                    BorderBrush="{StaticResource NothingBorderDarkBrush}"
-                                                    BorderThickness="1" VerticalAlignment="Center">
-                                                <TextBlock Text="{Binding IconGlyph}"
-                                                           FontFamily="{StaticResource PhosphorFont}"
-                                                           FontSize="21"
-                                                           Foreground="{StaticResource NothingWhiteBrush}"
-                                                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                            </Border>
+                                        <!-- Воздушная иконка Phosphor (без кругов, рамок и фона) -->
+                                        <TextBlock Text="{Binding IconGlyph}"
+                                                   FontFamily="{StaticResource PhosphorFont}"
+                                                   FontSize="26"
+                                                   Foreground="{Binding RowNameBrush}"
+                                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
 
-                                            <StackPanel Grid.Column="1" Margin="12,0,0,0" VerticalAlignment="Center">
-                                                <TextBlock Text="{Binding Name}" FontSize="22" Foreground="{Binding RowNameBrush}" TextWrapping="NoWrap" FontFamily="Segoe UI Semilight"/>
-                                                <TextBlock Text="{Binding Info}" FontSize="16" Foreground="{Binding RowInfoBrush}" Margin="0,4,0,0" FontFamily="Segoe UI"/>
-                                            </StackPanel>
-                                        </Grid>
-                                    </Border>
+                                        <StackPanel Grid.Column="1" Margin="14,0,0,0" VerticalAlignment="Center">
+                                            <TextBlock Text="{Binding Name}" FontSize="20" Foreground="{Binding RowNameBrush}" TextWrapping="NoWrap" FontFamily="Segoe UI Semilight"/>
+                                            <TextBlock Text="{Binding Info}" FontSize="13" Foreground="{Binding RowInfoBrush}" Margin="0,2,0,0" FontFamily="Segoe UI"/>
+                                        </StackPanel>
+                                    </Grid>
                                 </Border>
                             </DataTemplate>
                         </ListBox.ItemTemplate>
@@ -153,47 +144,35 @@ shell:SystemTray.IsVisible="True">
             <phone:PivotItem Header="передачи">
                 <Grid>
                     <ScrollViewer x:Name="TransfersScrollViewer" VerticalScrollBarVisibility="Auto">
-                        <StackPanel Margin="16,0,16,24">
+                        <StackPanel Margin="0,0,0,24">
 
-                            <!-- ПУСТОЕ СОСТОЯНИЕ -->
+                            <!-- ПУСТОЕ СОСТОЯНИЕ (Чистый Metro стиль) -->
                             <Border x:Name="TransfersEmptyState"
-                                    Background="{StaticResource NothingGraphiteBrush}"
-                                    BorderBrush="{StaticResource NothingBorderDarkBrush}"
-                                    BorderThickness="1" CornerRadius="26" Padding="24"
-                                    Margin="0,8,0,0">
+                                    Background="Transparent" BorderThickness="0"
+                                    Padding="24,32,24,0">
                                 <StackPanel>
-                                    <Border Width="64" Height="64" CornerRadius="20"
-                                            Background="{StaticResource NothingGraphiteRaisedBrush}"
-                                            HorizontalAlignment="Left">
-                                        <TextBlock Text="&#xE20C;" FontFamily="{StaticResource PhosphorFont}"
-                                                   FontSize="30" Foreground="{StaticResource NothingWhiteBrush}"
-                                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                    </Border>
-                                    <TextBlock Text="ПОКА НИЧЕГО НЕТ" FontSize="22"
-                                               Foreground="{StaticResource NothingWhiteBrush}"
-                                               FontFamily="Segoe UI Semilight" Margin="0,18,0,0"/>
+                                    <TextBlock Text="&#xE20C;" FontFamily="{StaticResource PhosphorFont}"
+                                               FontSize="48" Foreground="#444444"
+                                               HorizontalAlignment="Left"/>
+                                    <TextBlock Text="нет активных передач" FontSize="26"
+                                               Foreground="#FFFFFF"
+                                               FontFamily="Segoe UI Light" Margin="0,16,0,0"/>
                                     <TextBlock Text="Здесь появятся загрузки на Диск и скачивания на телефон."
-                                               FontSize="13" Foreground="{StaticResource NothingMutedDarkBrush}"
+                                               FontSize="14" Foreground="{StaticResource MetroMutedBrush}"
                                                FontFamily="Segoe UI" TextWrapping="Wrap" Margin="0,6,0,0"/>
-                                    <Button Style="{StaticResource NothingDarkPillButton}"
-                                            HorizontalAlignment="Left" Margin="0,18,0,0"
-                                            Click="OpenCloudFromTransfers_Click">
-                                        <StackPanel Orientation="Horizontal">
-                                            <TextBlock Text="&#xE24A;" FontFamily="{StaticResource PhosphorFont}"
-                                                       FontSize="17" Foreground="{StaticResource NothingWhiteBrush}"
-                                                       VerticalAlignment="Center"/>
-                                            <TextBlock Text="ОТКРЫТЬ ОБЛАКО" Style="{StaticResource NothingDarkPillLabel}"/>
-                                        </StackPanel>
-                                    </Button>
+                                    <Button Style="{StaticResource MetroPrimaryButton}"
+                                            Content="открыть облако"
+                                            HorizontalAlignment="Left" Margin="0,22,0,0"
+                                            Click="OpenCloudFromTransfers_Click"/>
                                 </StackPanel>
                             </Border>
 
                             <!-- АКТИВНЫЕ ПЕРЕДАЧИ -->
                             <StackPanel x:Name="ActiveTransfersSection" Visibility="Collapsed">
                                 <TextBlock x:Name="ActiveTransfersTitle" Text="АКТИВНЫЕ"
-                                           FontSize="11" FontFamily="Segoe UI Semibold"
-                                           Foreground="{StaticResource NothingMutedDarkBrush}"
-                                           Margin="4,0,4,10"/>
+                                           FontSize="12" FontFamily="Segoe UI Semibold"
+                                           Foreground="{StaticResource MetroMutedBrush}"
+                                           Margin="24,16,24,8"/>
                                 <ItemsControl x:Name="ActiveTransfersList"
                                               ItemTemplate="{StaticResource TransferRowTemplate}"/>
                             </StackPanel>
@@ -201,22 +180,17 @@ shell:SystemTray.IsVisible="True">
                             <!-- ЗАВЕРШЁННЫЕ ПЕРЕДАЧИ -->
                             <StackPanel x:Name="CompletedTransfersSection" Visibility="Collapsed"
                                         Margin="0,16,0,0">
-                                <Grid Margin="4,0,4,10">
+                                <Grid Margin="24,0,24,8">
                                     <TextBlock x:Name="CompletedTransfersTitle" Text="ЗАВЕРШЁННЫЕ"
-                                               FontSize="11" FontFamily="Segoe UI Semibold"
-                                               Foreground="{StaticResource NothingMutedDarkBrush}"
+                                               FontSize="12" FontFamily="Segoe UI Semibold"
+                                               Foreground="{StaticResource MetroMutedBrush}"
                                                VerticalAlignment="Center"/>
                                     <Button x:Name="ClearCompletedButton"
-                                            Style="{StaticResource NothingDarkPillButton}"
-                                            Height="34" Padding="12,0" HorizontalAlignment="Right"
+                                            Style="{StaticResource NothingLinkButton}"
+                                            HorizontalAlignment="Right"
                                             Visibility="Collapsed"
                                             Click="ClearCompletedTransfers_Click">
-                                        <StackPanel Orientation="Horizontal">
-                                            <TextBlock Text="&#xE4A6;" FontFamily="{StaticResource PhosphorFont}"
-                                                       FontSize="14" Foreground="{StaticResource NothingWhiteBrush}"
-                                                       VerticalAlignment="Center"/>
-                                            <TextBlock Text="ОЧИСТИТЬ" Style="{StaticResource NothingDarkPillLabel}"/>
-                                        </StackPanel>
+                                        <TextBlock Text="ОЧИСТИТЬ" Style="{StaticResource NothingLinkLabel}"/>
                                     </Button>
                                 </Grid>
                                 <ItemsControl x:Name="CompletedTransfersList"
@@ -230,72 +204,75 @@ shell:SystemTray.IsVisible="True">
             <!-- ВКЛАДКА 3: ИНФО -->
             <phone:PivotItem Header="инфо">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
-                    <StackPanel Margin="24,20,24,32">
-                        <Border Background="Transparent" Tap="AccountBlock_Tap" Margin="0,0,0,32">
+                    <StackPanel Margin="24,16,24,32">
+                        <Border Background="Transparent" Tap="AccountBlock_Tap" Margin="0,0,0,28">
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*"/>
                                     <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
                                 <StackPanel>
-                                    <TextBlock Text="ТЕКУЩИЙ АККАУНТ" Foreground="#666666" FontSize="14" FontFamily="Segoe UI Semibold"/>
-                                    <TextBlock x:Name="CurrentAccountText" Text="Не указан" FontSize="24" Foreground="White" Margin="0,8,0,0" FontFamily="Segoe UI Semilight" TextTrimming="WordEllipsis"/>
+                                    <TextBlock Text="ТЕКУЩИЙ АККАУНТ" Foreground="{StaticResource MetroMutedBrush}" FontSize="12" FontFamily="Segoe UI Semibold"/>
+                                    <TextBlock x:Name="CurrentAccountText" Text="Не указан" FontSize="26" Foreground="White" Margin="0,6,0,0" FontFamily="Segoe UI Light" TextTrimming="WordEllipsis"/>
                                 </StackPanel>
-                                <TextBlock Grid.Column="1" Text="&#xE13A;" FontFamily="{StaticResource PhosphorFont}" FontSize="22"
-                                           Foreground="#666666" VerticalAlignment="Center" Margin="12,0,0,0"/>
+                                <TextBlock Grid.Column="1" Text="&#xE13A;" FontFamily="{StaticResource PhosphorFont}" FontSize="20"
+                                           Foreground="#555555" VerticalAlignment="Center" Margin="12,0,0,0"/>
                             </Grid>
                         </Border>
 
-                        <TextBlock Text="ХРАНИЛИЩЕ" Foreground="#666666" FontSize="14" FontFamily="Segoe UI Semibold"/>
-                        <TextBlock x:Name="StorageText" Text="Загрузка..." FontSize="24" Foreground="White" Margin="0,8,0,32" FontFamily="Segoe UI Semilight"/>
+                        <Border Height="1" Background="{StaticResource MetroDividerBrush}" Margin="0,0,0,24"/>
 
-                        <TextBlock Text="ПОСЛЕДНИЕ СОБЫТИЯ" Foreground="#666666" FontSize="14" FontFamily="Segoe UI Semibold"/>
-                        <TextBlock x:Name="DiagnosticsText" Text="Записей нет." FontSize="11" Foreground="#999999"
+                        <TextBlock Text="ХРАНИЛИЩЕ" Foreground="{StaticResource MetroMutedBrush}" FontSize="12" FontFamily="Segoe UI Semibold"/>
+                        <TextBlock x:Name="StorageText" Text="Загрузка..." FontSize="26" Foreground="White" Margin="0,6,0,28" FontFamily="Segoe UI Light"/>
+
+                        <Border Height="1" Background="{StaticResource MetroDividerBrush}" Margin="0,0,0,24"/>
+
+                        <TextBlock Text="ПОСЛЕДНИЕ СОБЫТИЯ" Foreground="{StaticResource MetroMutedBrush}" FontSize="12" FontFamily="Segoe UI Semibold"/>
+                        <TextBlock x:Name="DiagnosticsText" Text="Записей нет." FontSize="11" Foreground="#666666"
                                    TextWrapping="Wrap" Margin="0,8,0,0"/>
                     </StackPanel>
                 </ScrollViewer>
             </phone:PivotItem>
         </phone:Pivot>
 
-        <!-- НИЖНИЕ ОСТРОВА -->
+        <!-- НИЖНЯЯ ПАНЕЛЬ ДЕЙСТВИЙ (METRO BOTTOM ACTION BAR: ЧИСТЫЕ ВОЗДУШНЫЕ ИКОНКИ PHOSPHOR) -->
         <StackPanel x:Name="BottomIslands" VerticalAlignment="Bottom" Canvas.ZIndex="90" Visibility="Collapsed">
 
-            <!-- ОСТРОВ ВЫБРАННОГО ОБЪЕКТА -->
-            <Border x:Name="SelectedIsland" Style="{StaticResource NothingFloatingCard}"
-                    Margin="16,0,16,10" Visibility="Collapsed">
+            <!-- ПАНЕЛЬ ВЫБРАННОГО ОБЪЕКТА (ФАЙЛА ИЛИ ПАПКИ) -->
+            <Border x:Name="SelectedIsland" Background="#000000" BorderBrush="{StaticResource MetroDividerBrush}"
+                    BorderThickness="0,1,0,0" Padding="20,10,20,10" Visibility="Collapsed">
                 <StackPanel>
-                    <Grid>
+                    <!-- Заголовок выбранного элемента + иконка типа + закрытие -->
+                    <Grid Margin="0,0,0,6">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
 
-                        <Border Width="42" Height="42" CornerRadius="21" Background="#EFEFED" VerticalAlignment="Center">
-                            <TextBlock x:Name="SelectedIslandTypeIcon" Text="&#xE230;"
-                                       FontFamily="{StaticResource PhosphorFont}" FontSize="20"
-                                       Foreground="{StaticResource NothingInkBrush}"
-                                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                        </Border>
+                        <TextBlock x:Name="SelectedIslandTypeIcon" Text="&#xE230;"
+                                   FontFamily="{StaticResource PhosphorFont}" FontSize="22"
+                                   Foreground="#FFFFFF" VerticalAlignment="Center" Margin="0,0,12,0"/>
 
-                        <StackPanel Grid.Column="1" Margin="12,0,8,0" VerticalAlignment="Center">
-                            <TextBlock x:Name="SelectedIslandTitle" FontSize="17" FontFamily="Segoe UI Semibold"
-                                       Foreground="{StaticResource NothingInkBrush}" TextTrimming="WordEllipsis"/>
-                            <TextBlock x:Name="SelectedIslandSubtitle" FontSize="10" FontFamily="Segoe UI Semibold"
-                                       Foreground="{StaticResource NothingMutedLightBrush}" Margin="0,2,0,0"
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                            <TextBlock x:Name="SelectedIslandTitle" FontSize="17" FontFamily="Segoe UI Semilight"
+                                       Foreground="#FFFFFF" TextTrimming="WordEllipsis"/>
+                            <TextBlock x:Name="SelectedIslandSubtitle" FontSize="11" FontFamily="Segoe UI"
+                                       Foreground="{StaticResource MetroMutedBrush}" Margin="0,1,0,0"
                                        TextTrimming="WordEllipsis"/>
                         </StackPanel>
 
-                        <Button Grid.Column="2" Style="{StaticResource NothingCloseButton}" Width="36" Height="36"
+                        <!-- Закрыть выбор -->
+                        <Button Grid.Column="2" Style="{StaticResource MetroIconButton}" Width="44" Height="44"
                                 Click="SelectedIslandClose_Click" VerticalAlignment="Center">
-                            <TextBlock Text="&#xE4F6;" FontFamily="{StaticResource PhosphorFont}" FontSize="16"
-                                       Foreground="{StaticResource NothingInkBrush}"
+                            <TextBlock Text="&#xE4F6;" FontFamily="{StaticResource PhosphorFont}" FontSize="18"
+                                       Foreground="{StaticResource MetroMutedBrush}"
                                        HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Button>
                     </Grid>
 
-                    <!-- ДЕЙСТВИЯ С ФАЙЛОМ -->
-                    <Grid x:Name="FileActionsGrid" Margin="0,6,0,0">
+                    <!-- ДЕЙСТВИЯ С ФАЙЛОМ: ЧИСТЫЕ ВОЗДУШНЫЕ ИКОНКИ (СКАЧАТЬ, ПЕРЕИМЕНОВАТЬ, УДАЛИТЬ, СВОЙСТВА) -->
+                    <Grid x:Name="FileActionsGrid" Height="56">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="*"/>
@@ -303,54 +280,29 @@ shell:SystemTray.IsVisible="True">
                             <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
 
-                        <Button Grid.Column="0" Style="{StaticResource NothingActionTile}" Click="SelectedDownload_Click">
-                            <StackPanel>
-                                <Border Width="42" Height="42" CornerRadius="21" Background="#EFEFED" HorizontalAlignment="Center">
-                                    <TextBlock Text="&#xE20C;" FontFamily="{StaticResource PhosphorFont}" FontSize="20"
-                                               Foreground="{StaticResource NothingInkBrush}"
-                                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                </Border>
-                                <TextBlock Text="СКАЧАТЬ" Style="{StaticResource NothingActionTileLabel}"/>
-                            </StackPanel>
+                        <Button Grid.Column="0" Style="{StaticResource MetroIconButton}" Click="SelectedDownload_Click" HorizontalAlignment="Center">
+                            <TextBlock Text="&#xE20C;" FontFamily="{StaticResource PhosphorFont}" FontSize="26"
+                                       Foreground="#FFFFFF" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Button>
 
-                        <Button Grid.Column="1" Style="{StaticResource NothingActionTile}" Click="SelectedRename_Click">
-                            <StackPanel>
-                                <Border Width="42" Height="42" CornerRadius="21" Background="#EFEFED" HorizontalAlignment="Center">
-                                    <TextBlock Text="&#xE3B4;" FontFamily="{StaticResource PhosphorFont}" FontSize="20"
-                                               Foreground="{StaticResource NothingInkBrush}"
-                                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                </Border>
-                                <TextBlock Text="ПЕРЕИМЕНОВАТЬ" Style="{StaticResource NothingActionTileLabel}" FontSize="9"/>
-                            </StackPanel>
+                        <Button Grid.Column="1" Style="{StaticResource MetroIconButton}" Click="SelectedRename_Click" HorizontalAlignment="Center">
+                            <TextBlock Text="&#xE3B4;" FontFamily="{StaticResource PhosphorFont}" FontSize="26"
+                                       Foreground="#FFFFFF" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Button>
 
-                        <Button Grid.Column="2" Style="{StaticResource NothingActionTile}" Click="SelectedDelete_Click">
-                            <StackPanel>
-                                <Border Width="42" Height="42" CornerRadius="21" Background="{StaticResource NothingRedSoftBrush}" HorizontalAlignment="Center">
-                                    <TextBlock Text="&#xE4A6;" FontFamily="{StaticResource PhosphorFont}" FontSize="20"
-                                               Foreground="{StaticResource NothingRedBrush}"
-                                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                </Border>
-                                <TextBlock Text="УДАЛИТЬ" Style="{StaticResource NothingActionTileLabel}"
-                                           Foreground="{StaticResource NothingRedBrush}"/>
-                            </StackPanel>
+                        <Button Grid.Column="2" Style="{StaticResource MetroIconButton}" Click="SelectedDelete_Click" HorizontalAlignment="Center">
+                            <TextBlock Text="&#xE4A6;" FontFamily="{StaticResource PhosphorFont}" FontSize="26"
+                                       Foreground="{StaticResource MetroRedBrush}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Button>
 
-                        <Button Grid.Column="3" Style="{StaticResource NothingActionTile}" Click="SelectedProperties_Click">
-                            <StackPanel>
-                                <Border Width="42" Height="42" CornerRadius="21" Background="#EFEFED" HorizontalAlignment="Center">
-                                    <TextBlock Text="&#xE2CE;" FontFamily="{StaticResource PhosphorFont}" FontSize="20"
-                                               Foreground="{StaticResource NothingInkBrush}"
-                                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                </Border>
-                                <TextBlock Text="СВОЙСТВА" Style="{StaticResource NothingActionTileLabel}"/>
-                            </StackPanel>
+                        <Button Grid.Column="3" Style="{StaticResource MetroIconButton}" Click="SelectedProperties_Click" HorizontalAlignment="Center">
+                            <TextBlock Text="&#xE2CE;" FontFamily="{StaticResource PhosphorFont}" FontSize="26"
+                                       Foreground="#FFFFFF" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Button>
                     </Grid>
 
-                    <!-- ДЕЙСТВИЯ С ПАПКОЙ -->
-                    <Grid x:Name="FolderActionsGrid" Margin="0,6,0,0" Visibility="Collapsed">
+                    <!-- ДЕЙСТВИЯ С ПАПКОЙ: ЧИСТЫЕ ВОЗДУШНЫЕ ИКОНКИ (ОТКРЫТЬ, СКАЧАТЬ АРХИВ, ПЕРЕИМЕНОВАТЬ, УДАЛИТЬ) -->
+                    <Grid x:Name="FolderActionsGrid" Height="56" Visibility="Collapsed">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="*"/>
@@ -358,285 +310,169 @@ shell:SystemTray.IsVisible="True">
                             <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
 
-                        <Button Grid.Column="0" Style="{StaticResource NothingActionTile}" Click="SelectedOpenFolder_Click">
-                            <StackPanel>
-                                <Border Width="42" Height="42" CornerRadius="21" Background="#EFEFED" HorizontalAlignment="Center">
-                                    <TextBlock Text="&#xE256;" FontFamily="{StaticResource PhosphorFont}" FontSize="20"
-                                               Foreground="{StaticResource NothingInkBrush}"
-                                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                </Border>
-                                <TextBlock Text="ОТКРЫТЬ" Style="{StaticResource NothingActionTileLabel}"/>
-                            </StackPanel>
+                        <Button Grid.Column="0" Style="{StaticResource MetroIconButton}" Click="SelectedOpenFolder_Click" HorizontalAlignment="Center">
+                            <TextBlock Text="&#xE256;" FontFamily="{StaticResource PhosphorFont}" FontSize="26"
+                                       Foreground="#FFFFFF" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Button>
 
-                        <Button Grid.Column="1" Style="{StaticResource NothingActionTile}" Click="SelectedDownloadAll_Click">
-                            <StackPanel>
-                                <Border Width="42" Height="42" CornerRadius="21" Background="#EFEFED" HorizontalAlignment="Center">
-                                    <TextBlock Text="&#xE20C;" FontFamily="{StaticResource PhosphorFont}" FontSize="20"
-                                               Foreground="{StaticResource NothingInkBrush}"
-                                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                </Border>
-                                <TextBlock Text="СКАЧАТЬ ВСЁ" Style="{StaticResource NothingActionTileLabel}" FontSize="9"/>
-                            </StackPanel>
+                        <Button Grid.Column="1" Style="{StaticResource MetroIconButton}" Click="SelectedDownloadAll_Click" HorizontalAlignment="Center">
+                            <TextBlock Text="&#xE20C;" FontFamily="{StaticResource PhosphorFont}" FontSize="26"
+                                       Foreground="#FFFFFF" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Button>
 
-                        <Button Grid.Column="2" Style="{StaticResource NothingActionTile}" Click="SelectedRename_Click">
-                            <StackPanel>
-                                <Border Width="42" Height="42" CornerRadius="21" Background="#EFEFED" HorizontalAlignment="Center">
-                                    <TextBlock Text="&#xE3B4;" FontFamily="{StaticResource PhosphorFont}" FontSize="20"
-                                               Foreground="{StaticResource NothingInkBrush}"
-                                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                </Border>
-                                <TextBlock Text="ПЕРЕИМЕНОВАТЬ" Style="{StaticResource NothingActionTileLabel}" FontSize="9"/>
-                            </StackPanel>
+                        <Button Grid.Column="2" Style="{StaticResource MetroIconButton}" Click="SelectedRename_Click" HorizontalAlignment="Center">
+                            <TextBlock Text="&#xE3B4;" FontFamily="{StaticResource PhosphorFont}" FontSize="26"
+                                       Foreground="#FFFFFF" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Button>
 
-                        <Button Grid.Column="3" Style="{StaticResource NothingActionTile}" Click="SelectedDelete_Click">
-                            <StackPanel>
-                                <Border Width="42" Height="42" CornerRadius="21" Background="{StaticResource NothingRedSoftBrush}" HorizontalAlignment="Center">
-                                    <TextBlock Text="&#xE4A6;" FontFamily="{StaticResource PhosphorFont}" FontSize="20"
-                                               Foreground="{StaticResource NothingRedBrush}"
-                                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                </Border>
-                                <TextBlock Text="УДАЛИТЬ" Style="{StaticResource NothingActionTileLabel}"
-                                           Foreground="{StaticResource NothingRedBrush}"/>
-                            </StackPanel>
+                        <Button Grid.Column="3" Style="{StaticResource MetroIconButton}" Click="SelectedDelete_Click" HorizontalAlignment="Center">
+                            <TextBlock Text="&#xE4A6;" FontFamily="{StaticResource PhosphorFont}" FontSize="26"
+                                       Foreground="{StaticResource MetroRedBrush}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Button>
                     </Grid>
                 </StackPanel>
             </Border>
 
-            <!-- ОСТРОВ ТЕКУЩЕЙ ПАПКИ -->
-            <Border x:Name="DirectoryIsland" Style="{StaticResource NothingFloatingCard}"
-                    Background="{StaticResource NothingGraphiteBrush}"
-                    BorderBrush="{StaticResource NothingBorderDarkBrush}"
-                    Margin="16,0,16,16">
+            <!-- ПАНЕЛЬ ТЕКУЩЕЙ ПАПКИ (ПРИКРЕПЛЁННАЯ СНИЗУ ПОСТОЯННО ДОСТУПНАЯ ПАНЕЛЬ ДЕЙСТВИЙ) -->
+            <Border x:Name="DirectoryIsland" Background="#000000" BorderBrush="{StaticResource MetroDividerBrush}"
+                    BorderThickness="0,1,0,0" Padding="16,4,16,4">
                 <StackPanel>
-                    <Grid>
+                    <!-- Скрытые элементы для 100% совместимости с C# логикой -->
+                    <TextBlock x:Name="DirectoryPathText" Visibility="Collapsed"/>
+                    <Button Style="{StaticResource MetroIconButton}" Width="0" Height="0" Visibility="Collapsed" Click="DirectoryCollapse_Click"/>
+
+                    <!-- Чистые воздушные иконки действий папки (Загрузить, Создать папку, Обновить, Переименовать) -->
+                    <Grid Height="56">
                         <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
 
-                        <StackPanel VerticalAlignment="Center">
-                            <TextBlock Text="ТЕКУЩАЯ ПАПКА" FontSize="10" FontFamily="Segoe UI Semibold"
-                                       Foreground="{StaticResource NothingMutedDarkBrush}"/>
-                            <TextBlock x:Name="DirectoryPathText" Text="диск /" FontSize="15" FontFamily="Segoe UI Semibold"
-                                       Foreground="{StaticResource NothingWhiteBrush}" Margin="0,3,0,0"
-                                       TextTrimming="WordEllipsis"/>
-                        </StackPanel>
+                        <!-- Загрузить файл -->
+                        <Button Grid.Column="0" Style="{StaticResource MetroIconButton}" Click="UploadFile_Click" HorizontalAlignment="Center">
+                            <TextBlock Text="&#xE4C0;" FontFamily="{StaticResource PhosphorFont}" FontSize="26"
+                                       Foreground="#FFFFFF" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Button>
 
-                        <Button Grid.Column="1" Style="{StaticResource NothingCloseButton}" Width="36" Height="36"
-                                Background="#14FFFFFF" Click="DirectoryCollapse_Click" VerticalAlignment="Center">
-                            <TextBlock Text="&#xE136;" FontFamily="{StaticResource PhosphorFont}" FontSize="16"
-                                       Foreground="{StaticResource NothingWhiteBrush}"
-                                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        <!-- Создать папку -->
+                        <Button Grid.Column="1" Style="{StaticResource MetroIconButton}" Click="CreateFolder_Click" HorizontalAlignment="Center">
+                            <TextBlock Text="&#xE258;" FontFamily="{StaticResource PhosphorFont}" FontSize="26"
+                                       Foreground="#FFFFFF" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Button>
+
+                        <!-- Обновить список -->
+                        <Button Grid.Column="2" Style="{StaticResource MetroIconButton}" Click="RefreshFolder_Click" HorizontalAlignment="Center">
+                            <TextBlock Text="&#xE094;" FontFamily="{StaticResource PhosphorFont}" FontSize="26"
+                                       Foreground="#FFFFFF" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Button>
+
+                        <!-- Переименовать текущую папку (показывается только внутри папок, не в корне) -->
+                        <Button x:Name="DirectoryRenameButton" Grid.Column="3" Style="{StaticResource MetroIconButton}"
+                                Visibility="Collapsed" Click="DirectoryRename_Click" HorizontalAlignment="Center">
+                            <TextBlock Text="&#xE3B4;" FontFamily="{StaticResource PhosphorFont}" FontSize="26"
+                                       Foreground="#FFFFFF" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Button>
                     </Grid>
-
-                    <Grid Margin="0,12,0,0">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="*"/>
-                        </Grid.ColumnDefinitions>
-
-                        <Button Grid.Column="0" Style="{StaticResource NothingDarkPillButton}" Margin="0,0,4,0"
-                                Click="UploadFile_Click">
-                            <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="&#xE4C0;" FontFamily="{StaticResource PhosphorFont}" FontSize="17"
-                                           Foreground="{StaticResource NothingWhiteBrush}" VerticalAlignment="Center"/>
-                                <TextBlock Text="ЗАГРУЗИТЬ" Style="{StaticResource NothingDarkPillLabel}"/>
-                            </StackPanel>
-                        </Button>
-
-                        <Button Grid.Column="1" Style="{StaticResource NothingDarkPillButton}" Margin="4,0,4,0"
-                                Click="CreateFolder_Click">
-                            <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="&#xE258;" FontFamily="{StaticResource PhosphorFont}" FontSize="17"
-                                           Foreground="{StaticResource NothingWhiteBrush}" VerticalAlignment="Center"/>
-                                <TextBlock Text="СОЗДАТЬ" Style="{StaticResource NothingDarkPillLabel}"/>
-                            </StackPanel>
-                        </Button>
-
-                        <Button Grid.Column="2" Style="{StaticResource NothingDarkPillButton}" Margin="4,0,0,0"
-                                Click="RefreshFolder_Click">
-                            <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="&#xE094;" FontFamily="{StaticResource PhosphorFont}" FontSize="17"
-                                           Foreground="{StaticResource NothingWhiteBrush}" VerticalAlignment="Center"/>
-                                <TextBlock Text="ОБНОВИТЬ" Style="{StaticResource NothingDarkPillLabel}"/>
-                            </StackPanel>
-                        </Button>
-                    </Grid>
-
-                    <Button x:Name="DirectoryRenameButton" Style="{StaticResource NothingDarkPillButton}"
-                            Margin="0,8,0,0" Visibility="Collapsed" Click="DirectoryRename_Click">
-                        <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="&#xE3B4;" FontFamily="{StaticResource PhosphorFont}" FontSize="17"
-                                       Foreground="{StaticResource NothingWhiteBrush}" VerticalAlignment="Center"/>
-                            <TextBlock Text="ПЕРЕИМЕНОВАТЬ" Style="{StaticResource NothingDarkPillLabel}"/>
-                        </StackPanel>
-                    </Button>
                 </StackPanel>
             </Border>
 
-            <!-- СВЁРНУТЫЙ МИКРО-ОСТРОВ -->
-            <Border x:Name="DirectoryMicroIsland" Visibility="Collapsed" HorizontalAlignment="Center"
-                    Background="{StaticResource NothingGraphiteBrush}"
-                    BorderBrush="{StaticResource NothingBorderDarkBrush}" BorderThickness="1"
-                    CornerRadius="22" Height="44" Padding="16,0" Margin="0,0,0,16"
-                    Tap="DirectoryMicroIsland_Tap">
-                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                    <TextBlock Text="&#xE24A;" FontFamily="{StaticResource PhosphorFont}" FontSize="16"
-                               Foreground="{StaticResource NothingWhiteBrush}" VerticalAlignment="Center"/>
-                    <TextBlock Text="ДЕЙСТВИЯ С ПАПКОЙ" FontSize="10" FontFamily="Segoe UI Semibold"
-                               Foreground="{StaticResource NothingWhiteBrush}" VerticalAlignment="Center" Margin="8,0,0,0"/>
-                    <TextBlock Text="&#xE13C;" FontFamily="{StaticResource PhosphorFont}" FontSize="13"
-                               Foreground="{StaticResource NothingMutedDarkBrush}" VerticalAlignment="Center" Margin="8,0,0,0"/>
-                </StackPanel>
-            </Border>
+            <!-- СВЁРНУТЫЙ МИКРО-ОСТРОВ (скрыт, сохранён для совместимости с C#) -->
+            <Border x:Name="DirectoryMicroIsland" Visibility="Collapsed" Tap="DirectoryMicroIsland_Tap"/>
 
-            <!-- ОСТРОВ ПЕРЕДАЧИ -->
-            <Border x:Name="TransferIsland" Style="{StaticResource NothingFloatingCard}"
-                    Margin="16,0,16,10" Visibility="Collapsed">
+            <!-- ПАНЕЛЬ ДЕЙСТВИЙ С ВЫБРАННОЙ ПЕРЕДАЧЕЙ -->
+            <Border x:Name="TransferIsland" Background="#000000" BorderBrush="{StaticResource MetroDividerBrush}"
+                    BorderThickness="0,1,0,0" Padding="20,10,20,10" Visibility="Collapsed">
                 <StackPanel>
-                    <Grid>
+                    <Grid Margin="0,0,0,6">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
 
-                        <Border Width="42" Height="42" CornerRadius="21" Background="#EFEFED"
-                                VerticalAlignment="Center">
-                            <TextBlock x:Name="TransferIslandIcon" Text="&#xE20C;"
-                                       FontFamily="{StaticResource PhosphorFont}" FontSize="20"
-                                       Foreground="{StaticResource NothingInkBrush}"
-                                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                        </Border>
+                        <TextBlock x:Name="TransferIslandIcon" Text="&#xE20C;"
+                                   FontFamily="{StaticResource PhosphorFont}" FontSize="22"
+                                   Foreground="#FFFFFF" VerticalAlignment="Center" Margin="0,0,12,0"/>
 
-                        <StackPanel Grid.Column="1" Margin="12,0,8,0" VerticalAlignment="Center">
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
                             <TextBlock x:Name="TransferIslandTitle" FontSize="17"
-                                       FontFamily="Segoe UI Semibold"
-                                       Foreground="{StaticResource NothingInkBrush}"
+                                       FontFamily="Segoe UI Semilight"
+                                       Foreground="#FFFFFF"
                                        TextTrimming="WordEllipsis"/>
-                            <TextBlock x:Name="TransferIslandSubtitle" FontSize="10"
-                                       FontFamily="Segoe UI Semibold"
-                                       Foreground="{StaticResource NothingMutedLightBrush}"
-                                       Margin="0,2,0,0" TextTrimming="WordEllipsis"/>
+                            <TextBlock x:Name="TransferIslandSubtitle" FontSize="11"
+                                       FontFamily="Segoe UI"
+                                       Foreground="{StaticResource MetroMutedBrush}"
+                                       Margin="0,1,0,0" TextTrimming="WordEllipsis"/>
                         </StackPanel>
 
-                        <Button Grid.Column="2" Style="{StaticResource NothingCloseButton}"
-                                Width="36" Height="36" Click="TransferIslandClose_Click"
+                        <Button Grid.Column="2" Style="{StaticResource MetroIconButton}"
+                                Width="44" Height="44" Click="TransferIslandClose_Click"
                                 VerticalAlignment="Center">
-                            <TextBlock Text="&#xE4F6;" FontFamily="{StaticResource PhosphorFont}" FontSize="16"
-                                       Foreground="{StaticResource NothingInkBrush}"
+                            <TextBlock Text="&#xE4F6;" FontFamily="{StaticResource PhosphorFont}" FontSize="18"
+                                       Foreground="{StaticResource MetroMutedBrush}"
                                        HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Button>
                     </Grid>
 
                     <!-- ОСТАНОВИТЬ АКТИВНУЮ -->
-                    <Grid x:Name="TransferRunningActions" Margin="0,6,0,0" Visibility="Collapsed">
-                        <Button Style="{StaticResource NothingActionTile}" Click="TransferCancelAction_Click">
-                            <StackPanel>
-                                <Border Width="42" Height="42" CornerRadius="21"
-                                        Background="{StaticResource NothingRedSoftBrush}"
-                                        HorizontalAlignment="Center">
-                                    <TextBlock Text="&#xE4F6;" FontFamily="{StaticResource PhosphorFont}"
-                                               FontSize="20" Foreground="{StaticResource NothingRedBrush}"
-                                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                </Border>
-                                <TextBlock Text="ОСТАНОВИТЬ" Style="{StaticResource NothingActionTileLabel}"
-                                           FontSize="9" Foreground="{StaticResource NothingRedBrush}"/>
-                            </StackPanel>
+                    <Grid x:Name="TransferRunningActions" Height="56" Visibility="Collapsed">
+                        <Button Style="{StaticResource MetroIconButton}" Click="TransferCancelAction_Click" HorizontalAlignment="Center">
+                            <TextBlock Text="&#xE4F6;" FontFamily="{StaticResource PhosphorFont}"
+                                       FontSize="26" Foreground="{StaticResource MetroRedBrush}"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Button>
                     </Grid>
 
                     <!-- ПОВТОРИТЬ ИЛИ УБРАТЬ -->
-                    <Grid x:Name="TransferRetryRemoveActions" Margin="0,6,0,0" Visibility="Collapsed">
+                    <Grid x:Name="TransferRetryRemoveActions" Height="56" Visibility="Collapsed">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
 
-                        <Button Grid.Column="0" Style="{StaticResource NothingActionTile}"
-                                Click="TransferRetryAction_Click">
-                            <StackPanel>
-                                <Border Width="42" Height="42" CornerRadius="21" Background="#EFEFED"
-                                        HorizontalAlignment="Center">
-                                    <TextBlock Text="&#xE094;" FontFamily="{StaticResource PhosphorFont}"
-                                               FontSize="20" Foreground="{StaticResource NothingInkBrush}"
-                                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                </Border>
-                                <TextBlock Text="ПОВТОРИТЬ" Style="{StaticResource NothingActionTileLabel}"
-                                           FontSize="9"/>
-                            </StackPanel>
+                        <Button Grid.Column="0" Style="{StaticResource MetroIconButton}"
+                                Click="TransferRetryAction_Click" HorizontalAlignment="Center">
+                            <TextBlock Text="&#xE094;" FontFamily="{StaticResource PhosphorFont}"
+                                       FontSize="26" Foreground="#FFFFFF"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Button>
 
-                        <Button Grid.Column="1" Style="{StaticResource NothingActionTile}"
-                                Click="TransferRemoveAction_Click">
-                            <StackPanel>
-                                <Border Width="42" Height="42" CornerRadius="21"
-                                        Background="{StaticResource NothingRedSoftBrush}"
-                                        HorizontalAlignment="Center">
-                                    <TextBlock Text="&#xE4A6;" FontFamily="{StaticResource PhosphorFont}"
-                                               FontSize="20" Foreground="{StaticResource NothingRedBrush}"
-                                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                </Border>
-                                <TextBlock Text="УБРАТЬ" Style="{StaticResource NothingActionTileLabel}"
-                                           Foreground="{StaticResource NothingRedBrush}"/>
-                            </StackPanel>
+                        <Button Grid.Column="1" Style="{StaticResource MetroIconButton}"
+                                Click="TransferRemoveAction_Click" HorizontalAlignment="Center">
+                            <TextBlock Text="&#xE4A6;" FontFamily="{StaticResource PhosphorFont}"
+                                       FontSize="26" Foreground="{StaticResource MetroRedBrush}"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Button>
                     </Grid>
 
                     <!-- ТОЛЬКО УБРАТЬ -->
-                    <Grid x:Name="TransferRemoveActions" Margin="0,6,0,0" Visibility="Collapsed">
-                        <Button Style="{StaticResource NothingActionTile}" Click="TransferRemoveAction_Click">
-                            <StackPanel>
-                                <Border Width="42" Height="42" CornerRadius="21"
-                                        Background="{StaticResource NothingRedSoftBrush}"
-                                        HorizontalAlignment="Center">
-                                    <TextBlock Text="&#xE4A6;" FontFamily="{StaticResource PhosphorFont}"
-                                               FontSize="20" Foreground="{StaticResource NothingRedBrush}"
-                                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                </Border>
-                                <TextBlock Text="УБРАТЬ" Style="{StaticResource NothingActionTileLabel}"
-                                           Foreground="{StaticResource NothingRedBrush}"/>
-                            </StackPanel>
+                    <Grid x:Name="TransferRemoveActions" Height="56" Visibility="Collapsed">
+                        <Button Style="{StaticResource MetroIconButton}" Click="TransferRemoveAction_Click" HorizontalAlignment="Center">
+                            <TextBlock Text="&#xE4A6;" FontFamily="{StaticResource PhosphorFont}"
+                                       FontSize="26" Foreground="{StaticResource MetroRedBrush}"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Button>
                     </Grid>
                 </StackPanel>
             </Border>
         </StackPanel>
 
-        <!-- ЭКРАН АВТОРИЗАЦИИ -->
+        <!-- ЭКРАН АВТОРИЗАЦИИ (METRO UI: ЧИСТЫЙ ЧЁРНЫЙ ЭКРАН, ВЫРАВНИВАНИЕ ПО ЦЕНТРУ, БЕЗ МУСОРА) -->
         <Grid x:Name="AuthArea" Canvas.ZIndex="100" Background="Black">
             <ScrollViewer VerticalScrollBarVisibility="Auto">
-                <StackPanel Margin="24,36,24,36">
+                <Grid MinHeight="760">
+                    <StackPanel VerticalAlignment="Center" Margin="32,24,32,24">
 
-                    <Grid Width="64" Height="64" HorizontalAlignment="Left">
-                        <Border Width="64" Height="64" CornerRadius="32"
-                                Background="{StaticResource NothingGraphiteBrush}"
-                                BorderBrush="{StaticResource NothingBorderDarkBrush}" BorderThickness="1"/>
-                        <TextBlock Text="&#xE24A;" FontFamily="{StaticResource PhosphorFont}" FontSize="28"
-                                   Foreground="{StaticResource NothingWhiteBrush}"
-                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                    </Grid>
+                        <!-- Заголовок приложения по центру -->
+                        <TextBlock Text="яндекс диск" FontSize="42" FontFamily="Segoe UI Light"
+                                   Foreground="#FFFFFF" HorizontalAlignment="Center" TextAlignment="Center"/>
 
-                    <TextBlock Text="ЯНДЕКС ДИСК" FontSize="34" FontFamily="Segoe UI Light"
-                               Foreground="{StaticResource NothingWhiteBrush}" Margin="0,18,0,0"/>
-                    <TextBlock Text="WEBDAV · NOKIA LUMIA 925" FontSize="10" FontFamily="Segoe UI Semibold"
-                               Foreground="{StaticResource NothingMutedDarkBrush}" Margin="0,6,0,0"/>
-
-                    <Border Background="{StaticResource NothingGraphiteBrush}"
-                            BorderBrush="{StaticResource NothingBorderDarkBrush}" BorderThickness="1"
-                            CornerRadius="26" Padding="20" Margin="0,28,0,0">
-                        <StackPanel>
-                            <TextBlock Text="ВХОД В АККАУНТ" FontSize="11" FontFamily="Segoe UI Semibold"
-                                       Foreground="{StaticResource NothingMutedDarkBrush}"/>
-
-                            <TextBlock Text="ЛОГИН" FontSize="10" FontFamily="Segoe UI Semibold"
-                                       Foreground="{StaticResource NothingMutedDarkBrush}" Margin="2,18,0,6"/>
+                        <!-- Форма авторизации -->
+                        <StackPanel Margin="0,44,0,0">
+                            <TextBlock Text="ЛОГИН" FontSize="11" FontFamily="Segoe UI Semibold"
+                                       Foreground="{StaticResource MetroMutedBrush}" Margin="0,0,0,8"/>
                             <TextBox x:Name="LoginTextBox" Style="{StaticResource NothingAuthField}"
                                      KeyDown="LoginTextBox_KeyDown">
                                 <TextBox.InputScope>
@@ -646,9 +482,9 @@ shell:SystemTray.IsVisible="True">
                                 </TextBox.InputScope>
                             </TextBox>
 
-                            <Grid Margin="2,16,2,6">
-                                <TextBlock Text="ПАРОЛЬ ПРИЛОЖЕНИЯ" FontSize="10" FontFamily="Segoe UI Semibold"
-                                           Foreground="{StaticResource NothingMutedDarkBrush}" VerticalAlignment="Center"/>
+                            <Grid Margin="0,20,0,8">
+                                <TextBlock Text="ПАРОЛЬ" FontSize="11" FontFamily="Segoe UI Semibold"
+                                           Foreground="{StaticResource MetroMutedBrush}" VerticalAlignment="Center"/>
                                 <Button x:Name="PasswordRevealButton" Style="{StaticResource NothingLinkButton}"
                                         HorizontalAlignment="Right" Click="PasswordRevealButton_Click">
                                     <TextBlock x:Name="PasswordRevealLabel" Text="ПОКАЗАТЬ"
@@ -664,53 +500,36 @@ shell:SystemTray.IsVisible="True">
                                          TextChanged="PasswordTextBox_TextChanged"/>
                             </Grid>
 
-                            <Button x:Name="LoginButton" Style="{StaticResource NothingLightPillButton}"
-                                    Margin="0,20,0,0" Click="LoginButton_Click">
+                            <Button x:Name="LoginButton" Style="{StaticResource MetroPrimaryButton}"
+                                    Height="52" HorizontalAlignment="Stretch"
+                                    Margin="0,28,0,0" Click="LoginButton_Click">
                                 <TextBlock x:Name="LoginButtonLabel" Text="ВОЙТИ"
                                            Style="{StaticResource NothingLightPillLabel}"/>
                             </Button>
 
                             <ProgressBar x:Name="AuthProgress" IsIndeterminate="True" Visibility="Collapsed"
-                                         Height="3" Margin="0,12,0,0"
-                                         Foreground="{StaticResource NothingWhiteBrush}"
-                                         Background="{StaticResource NothingBorderDarkBrush}"
+                                         Height="2" Margin="0,16,0,0"
+                                         Foreground="#FFFFFF"
+                                         Background="{StaticResource MetroSubtleBorderBrush}"
                                          BorderThickness="0"/>
-                            <TextBlock x:Name="StatusText" Text="ВВЕДИТЕ ЛОГИН И ПАРОЛЬ ПРИЛОЖЕНИЯ"
-                                       Foreground="{StaticResource NothingMutedDarkBrush}" FontSize="12"
-                                       FontFamily="Segoe UI" TextWrapping="Wrap" Margin="0,12,0,0"/>
+                            <TextBlock x:Name="StatusText" Text="ВВЕДИТЕ ЛОГИН И ПАРОЛЬ"
+                                       Foreground="{StaticResource MetroMutedBrush}" FontSize="12"
+                                       FontFamily="Segoe UI" TextWrapping="Wrap"
+                                       HorizontalAlignment="Center" TextAlignment="Center"
+                                       Margin="0,16,0,0"/>
                         </StackPanel>
-                    </Border>
-
-                    <Border Background="Transparent"
-                            BorderBrush="{StaticResource NothingBorderDarkBrush}" BorderThickness="1"
-                            CornerRadius="22" Padding="20" Margin="0,14,0,0">
-                        <StackPanel>
-                            <TextBlock Text="ПАРОЛЬ ПРИЛОЖЕНИЯ" FontSize="10" FontFamily="Segoe UI Semibold"
-                                       Foreground="{StaticResource NothingMutedDarkBrush}"/>
-                            <TextBlock Text="Обычный пароль от аккаунта не подойдёт. Создайте отдельный пароль в Яндекс ID → Безопасность → Пароли приложений."
-                                       Foreground="{StaticResource NothingMutedDarkBrush}" FontSize="12"
-                                       FontFamily="Segoe UI" TextWrapping="Wrap" Margin="0,8,0,0"/>
-                            <Button Style="{StaticResource NothingDarkPillButton}"
-                                    HorizontalAlignment="Left" Margin="0,14,0,0"
-                                    Click="OpenAppPasswordHelp_Click">
-                                <StackPanel Orientation="Horizontal">
-                                    <TextBlock Text="&#xE13A;" FontFamily="{StaticResource PhosphorFont}"
-                                               FontSize="13" Foreground="{StaticResource NothingWhiteBrush}"
-                                               VerticalAlignment="Center"/>
-                                    <TextBlock Text="ОТКРЫТЬ ИНСТРУКЦИЮ" Style="{StaticResource NothingDarkPillLabel}"/>
-                                </StackPanel>
-                            </Button>
-                        </StackPanel>
-                    </Border>
-                </StackPanel>
+                    </StackPanel>
+                </Grid>
             </ScrollViewer>
         </Grid>
 
-        <!-- МОДАЛЬНЫЙ СЛОЙ: МЕНЮ АККАУНТА И КАРТОЧКА ПОДТВЕРЖДЕНИЯ -->
+        <!-- МОДАЛЬНЫЙ СЛОЙ: МЕНЮ АККАУНТА И КАРТОЧКА ПОДТВЕРЖДЕНИЯ (METRO UI: ЧЁРНЫЕ ПАНЕЛИ, 0 РАДИУС) -->
         <Grid x:Name="ModalOverlay" Canvas.ZIndex="200" Visibility="Collapsed">
-            <Border x:Name="ModalBackdrop" Background="#B3000000" Tap="ModalOverlay_Tap"/>
+            <Border x:Name="ModalBackdrop" Background="#CC000000" Tap="ModalOverlay_Tap"/>
+
+            <!-- МЕНЮ АККАУНТА -->
             <Border x:Name="AccountMenuCard" Style="{StaticResource NothingSheetCard}"
-                    VerticalAlignment="Bottom" Margin="16,0,16,24" Tap="AccountMenuCard_Tap">
+                    VerticalAlignment="Bottom" Margin="0" Tap="AccountMenuCard_Tap">
                 <Border.RenderTransform>
                     <TranslateTransform X="0" Y="24"/>
                 </Border.RenderTransform>
@@ -725,76 +544,72 @@ shell:SystemTray.IsVisible="True">
                         <StackPanel VerticalAlignment="Center">
                             <TextBlock Text="АККАУНТ" Style="{StaticResource NothingSheetCaption}"/>
                             <TextBlock x:Name="AccountMenuLogin" Text="Не указан" Style="{StaticResource NothingSheetTitle}"
-                                       FontSize="22" Margin="0,4,0,0" TextTrimming="WordEllipsis"/>
+                                       FontSize="24" Margin="0,4,0,0" TextTrimming="WordEllipsis"/>
                             <TextBlock Text="Яндекс.Диск · WebDAV" Style="{StaticResource NothingRowCaption}" Margin="0,2,0,0"/>
                         </StackPanel>
 
-                        <Button Grid.Column="1" Style="{StaticResource NothingCloseButton}"
+                        <Button Grid.Column="1" Style="{StaticResource MetroIconButton}" Width="44" Height="44"
                                 Click="AccountMenuClose_Click" VerticalAlignment="Top">
                             <TextBlock Text="&#xE4F6;" FontFamily="{StaticResource PhosphorFont}" FontSize="20"
-                                       Foreground="{StaticResource NothingInkBrush}"
+                                       Foreground="{StaticResource MetroMutedBrush}"
                                        HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Button>
                     </Grid>
 
                     <TextBlock Text="ХРАНИЛИЩЕ" Style="{StaticResource NothingSheetCaption}" Margin="0,24,0,0"/>
-                    <Border x:Name="AccountStorageTrack" Height="4" CornerRadius="2" Background="#E4E4E1"
-                            Margin="0,12,0,8" SizeChanged="AccountStorageTrack_SizeChanged">
-                        <Border x:Name="AccountStorageFill" Background="{StaticResource NothingInkBrush}"
-                                CornerRadius="2" HorizontalAlignment="Left" Width="0"/>
+                    <Border x:Name="AccountStorageTrack" Height="4" CornerRadius="0" Background="{StaticResource MetroSubtleBorderBrush}"
+                            Margin="0,10,0,8" SizeChanged="AccountStorageTrack_SizeChanged">
+                        <Border x:Name="AccountStorageFill" Background="#FFFFFF"
+                                CornerRadius="0" HorizontalAlignment="Left" Width="0"/>
                     </Border>
                     <TextBlock x:Name="AccountStorageText" Text="Загрузка..." Style="{StaticResource NothingRowCaption}"/>
 
-                    <Border Height="1" Background="{StaticResource NothingBorderLightBrush}" Margin="0,20,0,12"/>
+                    <Border Height="1" Background="{StaticResource MetroDividerBrush}" Margin="0,20,0,12"/>
 
+                    <!-- Обновить данные -->
                     <Button Style="{StaticResource NothingRowButton}" Click="AccountMenuRefresh_Click">
                         <Grid Height="56">
                             <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="44"/>
+                                <ColumnDefinition Width="36"/>
                                 <ColumnDefinition Width="*"/>
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
-                            <Border Width="40" Height="40" CornerRadius="20" Background="#F0F0EE" VerticalAlignment="Center">
-                                <TextBlock Text="&#xE094;" FontFamily="{StaticResource PhosphorFont}" FontSize="20"
-                                           Foreground="{StaticResource NothingInkBrush}"
-                                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                            </Border>
+                            <TextBlock Text="&#xE094;" FontFamily="{StaticResource PhosphorFont}" FontSize="22"
+                                       Foreground="#FFFFFF" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                             <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="14,0,0,0">
                                 <TextBlock Text="Обновить данные" Style="{StaticResource NothingRowTitle}"/>
                                 <TextBlock Text="Папка и занятое место" Style="{StaticResource NothingRowCaption}" Margin="0,2,0,0"/>
                             </StackPanel>
                             <TextBlock Grid.Column="2" Text="&#xE13A;" FontFamily="{StaticResource PhosphorFont}"
-                                       FontSize="18" Foreground="#9A9A9A" VerticalAlignment="Center"/>
+                                       FontSize="16" Foreground="#555555" VerticalAlignment="Center"/>
                         </Grid>
                     </Button>
 
+                    <!-- Выйти из аккаунта -->
                     <Button Style="{StaticResource NothingRowButton}" Click="AccountMenuLogout_Click" Margin="0,4,0,0">
                         <Grid Height="56">
                             <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="44"/>
+                                <ColumnDefinition Width="36"/>
                                 <ColumnDefinition Width="*"/>
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
-                            <Border Width="40" Height="40" CornerRadius="20" Background="{StaticResource NothingRedSoftBrush}" VerticalAlignment="Center">
-                                <TextBlock Text="&#xE42A;" FontFamily="{StaticResource PhosphorFont}" FontSize="20"
-                                           Foreground="{StaticResource NothingRedBrush}"
-                                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                            </Border>
+                            <TextBlock Text="&#xE42A;" FontFamily="{StaticResource PhosphorFont}" FontSize="22"
+                                       Foreground="{StaticResource MetroRedBrush}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                             <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="14,0,0,0">
                                 <TextBlock Text="Выйти" Style="{StaticResource NothingRowTitle}"
-                                           Foreground="{StaticResource NothingRedBrush}"/>
+                                           Foreground="{StaticResource MetroRedBrush}"/>
                                 <TextBlock Text="Отключить аккаунт на устройстве" Style="{StaticResource NothingRowCaption}" Margin="0,2,0,0"/>
                             </StackPanel>
                             <TextBlock Grid.Column="2" Text="&#xE13A;" FontFamily="{StaticResource PhosphorFont}"
-                                       FontSize="18" Foreground="{StaticResource NothingRedBrush}" VerticalAlignment="Center"/>
+                                       FontSize="16" Foreground="{StaticResource MetroRedBrush}" VerticalAlignment="Center"/>
                         </Grid>
                     </Button>
                 </StackPanel>
             </Border>
 
-            <!-- КАРТОЧКА ПОДТВЕРЖДЕНИЯ: ТО ЖЕ МЕСТО, ЧТО У МЕНЮ АККАУНТА -->
+            <!-- КАРТОЧКА ПОДТВЕРЖДЕНИЯ И ВВОДА (METRO ДИАЛОГ) -->
             <Border x:Name="NothingDialogCard" Style="{StaticResource NothingSheetCard}"
-                    VerticalAlignment="Bottom" Margin="16,0,16,24" Tap="NothingDialogCard_Tap"
+                    VerticalAlignment="Bottom" Margin="0" Tap="NothingDialogCard_Tap"
                     Visibility="Collapsed">
                 <Border.RenderTransform>
                     <TranslateTransform X="480"/>
@@ -804,17 +619,18 @@ shell:SystemTray.IsVisible="True">
                     <TextBlock x:Name="NothingDialogTitle" Style="{StaticResource NothingDialogTitle}"/>
                     <TextBlock x:Name="NothingDialogMessage" Style="{StaticResource NothingDialogBody}" Margin="0,10,0,0"/>
 
-                    <Border x:Name="NothingDialogInputBorder" Visibility="Collapsed" Background="#F2F2F0"
-                            CornerRadius="16" Margin="0,18,0,0" Padding="14,0">
-                        <TextBox x:Name="NothingDialogInput" Height="50" BorderThickness="0"
-                                 Background="Transparent" Foreground="{StaticResource NothingInkBrush}"
-                                 FontSize="17" FontFamily="Segoe UI" Padding="0"
+                    <Border x:Name="NothingDialogInputBorder" Visibility="Collapsed" Background="#000000"
+                            BorderBrush="{StaticResource MetroSubtleBorderBrush}" BorderThickness="1.5"
+                            CornerRadius="0" Margin="0,16,0,0" Padding="10,0">
+                        <TextBox x:Name="NothingDialogInput" Height="48" BorderThickness="0"
+                                 Background="Transparent" Foreground="#FFFFFF"
+                                 FontSize="18" FontFamily="Segoe UI" Padding="0"
                                  VerticalContentAlignment="Center" MaxLength="255"
                                  KeyDown="NothingDialogInput_KeyDown"/>
                     </Border>
 
                     <TextBlock x:Name="NothingDialogError" Visibility="Collapsed" FontFamily="Segoe UI"
-                               FontSize="12" Foreground="{StaticResource NothingRedBrush}"
+                               FontSize="12" Foreground="{StaticResource MetroRedBrush}"
                                TextWrapping="Wrap" Margin="0,8,0,0"/>
 
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,24,0,0">

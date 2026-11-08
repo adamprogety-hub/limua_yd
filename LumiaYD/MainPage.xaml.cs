@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Windows;
 using System.Windows.Navigation;
 using System.Windows.Controls;
@@ -758,6 +758,9 @@ namespace LumiaYD
             NothingDialogPrimaryButton.Content = primaryText;
             NothingDialogPrimaryButton.Background = (SolidColorBrush)Application.Current.Resources[
                 isDanger ? "NothingRedBrush" : "NothingInkBrush"];
+            NothingDialogPrimaryButton.Foreground = isDanger
+                ? new SolidColorBrush(Colors.White)
+                : new SolidColorBrush(Colors.Black);
 
             NothingDialogInputBorder.Visibility = Visibility.Collapsed;
             NothingDialogError.Visibility = Visibility.Collapsed;
@@ -1571,8 +1574,8 @@ namespace LumiaYD
                 : Visibility.Collapsed;
 
             bool showDirectory = cloudTab && !_selectedIslandOpen;
-            DirectoryIsland.Visibility = (showDirectory && _directoryExpanded) ? Visibility.Visible : Visibility.Collapsed;
-            DirectoryMicroIsland.Visibility = (showDirectory && !_directoryExpanded) ? Visibility.Visible : Visibility.Collapsed;
+            DirectoryIsland.Visibility = showDirectory ? Visibility.Visible : Visibility.Collapsed;
+            DirectoryMicroIsland.Visibility = Visibility.Collapsed;
 
             TransferIsland.Visibility = (transfersTab && _transferIslandOpen)
                 ? Visibility.Visible
@@ -1584,7 +1587,7 @@ namespace LumiaYD
             _directoryCollapseTimer.Stop();
             _selectedIslandOpen = false;
             _selectedIslandVersion++;
-            _directoryExpanded = false;
+            _directoryExpanded = true;
             selectedItem = null;
 
             BottomIslands.Visibility = Visibility.Collapsed;
@@ -1609,14 +1612,7 @@ namespace LumiaYD
 
             if (BottomIslands.Visibility == Visibility.Visible)
             {
-                if (_selectedIslandOpen)
-                {
-                    bottom = 180;
-                }
-                else
-                {
-                    bottom = _directoryExpanded ? (currentPath == "/" ? 152 : 208) : 68;
-                }
+                bottom = _selectedIslandOpen ? 120 : 68;
             }
 
             FilesListBox.Margin = new Thickness(0, 0, 0, bottom);
@@ -1629,7 +1625,7 @@ namespace LumiaYD
                 return;
             }
 
-            double bottom = (_transferIslandOpen && MainPivot.SelectedIndex == 1) ? 180 : 0;
+            double bottom = (_transferIslandOpen && MainPivot.SelectedIndex == 1) ? 120 : 0;
             TransfersScrollViewer.Margin = new Thickness(0, 0, 0, bottom);
         }
 
@@ -1640,50 +1636,22 @@ namespace LumiaYD
                 return;
             }
 
-            bool wasVisible = DirectoryIsland.Visibility == Visibility.Visible;
             _directoryExpanded = true;
 
             DirectoryMicroIsland.Visibility = Visibility.Collapsed;
             DirectoryIsland.Visibility = Visibility.Visible;
-
-            if (!wasVisible && BottomIslands.Visibility == Visibility.Visible)
-            {
-                DirectoryIsland.Opacity = 0;
-                SetTranslate(DirectoryIsland, 0, 12);
-
-                Storyboard storyboard = new Storyboard();
-                AddOpacityAnimation(storyboard, DirectoryIsland, 0, 1, 150);
-                AddTranslateYAnimation(storyboard, DirectoryIsland, 0, 170);
-                storyboard.Begin();
-            }
-            else
-            {
-                DirectoryIsland.Opacity = 1;
-                SetTranslate(DirectoryIsland, 0, 0);
-            }
+            DirectoryIsland.Opacity = 1;
+            SetTranslate(DirectoryIsland, 0, 0);
 
             UpdateBottomIslandsPadding();
-            RestartDirectoryCollapseTimer();
         }
 
         private void CollapseDirectoryIsland()
         {
-            if (!_directoryExpanded)
-            {
-                return;
-            }
-
-            _directoryExpanded = false;
             _directoryCollapseTimer.Stop();
-
-            DirectoryIsland.Visibility = Visibility.Collapsed;
-            DirectoryMicroIsland.Visibility = Visibility.Visible;
-            DirectoryMicroIsland.Opacity = 0;
-
-            Storyboard storyboard = new Storyboard();
-            AddOpacityAnimation(storyboard, DirectoryMicroIsland, 0, 1, 150);
-            storyboard.Begin();
-
+            _directoryExpanded = true;
+            DirectoryIsland.Visibility = Visibility.Visible;
+            DirectoryMicroIsland.Visibility = Visibility.Collapsed;
             UpdateBottomIslandsPadding();
         }
 
@@ -1874,21 +1842,12 @@ namespace LumiaYD
         private void RestartDirectoryCollapseTimer()
         {
             _directoryCollapseTimer.Stop();
-
-            if (BottomIslands.Visibility == Visibility.Visible && _directoryExpanded && !_selectedIslandOpen)
-            {
-                _directoryCollapseTimer.Start();
-            }
+            // In Metro UI, directory actions remain docked and permanently accessible
         }
 
         private void DirectoryCollapseTimer_Tick(object sender, EventArgs e)
         {
             _directoryCollapseTimer.Stop();
-
-            if (BottomIslands.Visibility == Visibility.Visible && _directoryExpanded && !_selectedIslandOpen)
-            {
-                CollapseDirectoryIsland();
-            }
         }
 
         private void DirectoryCollapse_Click(object sender, RoutedEventArgs e)

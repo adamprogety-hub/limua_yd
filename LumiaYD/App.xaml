@@ -1,4 +1,4 @@
-﻿<Application
+<Application
     x:Class="LumiaYD.App"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
@@ -6,82 +6,88 @@
     xmlns:shell="clr-namespace:Microsoft.Phone.Shell;assembly=Microsoft.Phone">
 
     <!--Application Resources-->
-
     <Application.Resources>
         <FontFamily x:Key="PhosphorFont">/Assets/Fonts/Phosphor.ttf#Phosphor</FontFamily>
 
+        <!-- Pure Metro AMOLED Palette -->
+        <SolidColorBrush x:Key="MetroBlackBrush" Color="#000000"/>
+        <SolidColorBrush x:Key="MetroWhiteBrush" Color="#FFFFFF"/>
+        <SolidColorBrush x:Key="MetroMutedBrush" Color="#888888"/>
+        <SolidColorBrush x:Key="MetroDividerBrush" Color="#1A1A1A"/>
+        <SolidColorBrush x:Key="MetroSubtleBorderBrush" Color="#2A2A2A"/>
+        <SolidColorBrush x:Key="MetroRedBrush" Color="#D71920"/>
+        <SolidColorBrush x:Key="MetroSelectedRowBrush" Color="#1A1A1A"/>
+
+        <!-- Legacy Brushes for Code-behind & Resource Compatibility -->
         <SolidColorBrush x:Key="NothingBlackBrush" Color="#000000"/>
-        <SolidColorBrush x:Key="NothingGraphiteBrush" Color="#161616"/>
-        <SolidColorBrush x:Key="NothingGraphiteRaisedBrush" Color="#202020"/>
-        <SolidColorBrush x:Key="NothingWhiteBrush" Color="#F6F6F4"/>
-        <SolidColorBrush x:Key="NothingInkBrush" Color="#0A0A0A"/>
-        <SolidColorBrush x:Key="NothingMutedDarkBrush" Color="#8A8A8A"/>
-        <SolidColorBrush x:Key="NothingMutedLightBrush" Color="#6E6E6E"/>
-        <SolidColorBrush x:Key="NothingBorderDarkBrush" Color="#2A2A2A"/>
-        <SolidColorBrush x:Key="NothingBorderLightBrush" Color="#E2E2E0"/>
+        <SolidColorBrush x:Key="NothingGraphiteBrush" Color="#000000"/>
+        <SolidColorBrush x:Key="NothingGraphiteRaisedBrush" Color="#0D0D0D"/>
+        <SolidColorBrush x:Key="NothingWhiteBrush" Color="#1E1E1E"/>
+        <SolidColorBrush x:Key="NothingInkBrush" Color="#FFFFFF"/>
+        <SolidColorBrush x:Key="NothingMutedDarkBrush" Color="#888888"/>
+        <SolidColorBrush x:Key="NothingMutedLightBrush" Color="#888888"/>
+        <SolidColorBrush x:Key="NothingBorderDarkBrush" Color="#222222"/>
+        <SolidColorBrush x:Key="NothingBorderLightBrush" Color="#222222"/>
         <SolidColorBrush x:Key="NothingRedBrush" Color="#D71920"/>
-        <SolidColorBrush x:Key="NothingRedSoftBrush" Color="#14D71920"/>
+        <SolidColorBrush x:Key="NothingRedSoftBrush" Color="#00000000"/>
 
-        <Style x:Key="NothingSheetCard" TargetType="Border">
-            <Setter Property="Background" Value="{StaticResource NothingWhiteBrush}"/>
-            <Setter Property="CornerRadius" Value="28"/>
-            <Setter Property="BorderBrush" Value="{StaticResource NothingBorderLightBrush}"/>
-            <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="Padding" Value="24"/>
+        <!-- Metro Icon Button (Zero Border, Zero Container, Pure Airy Icon) -->
+        <Style x:Key="MetroIconButton" TargetType="Button">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="#FFFFFF"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="Width" Value="56"/>
+            <Setter Property="Height" Value="56"/>
+            <Setter Property="HorizontalContentAlignment" Value="Center"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="ButtonRoot" Background="{TemplateBinding Background}">
+                            <VisualStateManager.VisualStateGroups>
+                                <VisualStateGroup x:Name="CommonStates">
+                                    <VisualState x:Name="Normal"/>
+                                    <VisualState x:Name="Pressed">
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetName="ButtonRoot"
+                                                             Storyboard.TargetProperty="Opacity"
+                                                             To="0.45" Duration="0:0:0.1"/>
+                                        </Storyboard>
+                                    </VisualState>
+                                    <VisualState x:Name="Disabled">
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetName="ButtonRoot"
+                                                             Storyboard.TargetProperty="Opacity"
+                                                             To="0.25" Duration="0:0:0.1"/>
+                                        </Storyboard>
+                                    </VisualState>
+                                </VisualStateGroup>
+                            </VisualStateManager.VisualStateGroups>
+                            <ContentPresenter Content="{TemplateBinding Content}"
+                                              ContentTemplate="{TemplateBinding ContentTemplate}"
+                                              HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
 
-        <Style x:Key="NothingSheetCaption" TargetType="TextBlock">
+        <!-- Metro Primary Button (Flat Rectangle, White on Black, 0 Radius) -->
+        <Style x:Key="MetroPrimaryButton" TargetType="Button">
+            <Setter Property="Background" Value="#FFFFFF"/>
+            <Setter Property="Foreground" Value="#000000"/>
             <Setter Property="FontFamily" Value="Segoe UI Semibold"/>
-            <Setter Property="FontSize" Value="11"/>
-            <Setter Property="Foreground" Value="{StaticResource NothingMutedLightBrush}"/>
-        </Style>
-
-        <Style x:Key="NothingSheetTitle" TargetType="TextBlock">
-            <Setter Property="FontFamily" Value="Segoe UI Light"/>
-            <Setter Property="FontSize" Value="26"/>
-            <Setter Property="Foreground" Value="{StaticResource NothingInkBrush}"/>
-        </Style>
-
-        <Style x:Key="NothingRowTitle" TargetType="TextBlock">
-            <Setter Property="FontFamily" Value="Segoe UI Semibold"/>
-            <Setter Property="FontSize" Value="16"/>
-            <Setter Property="Foreground" Value="{StaticResource NothingInkBrush}"/>
-        </Style>
-
-        <Style x:Key="NothingRowCaption" TargetType="TextBlock">
-            <Setter Property="FontFamily" Value="Segoe UI"/>
-            <Setter Property="FontSize" Value="12"/>
-            <Setter Property="Foreground" Value="{StaticResource NothingMutedLightBrush}"/>
-        </Style>
-
-        <Style x:Key="NothingDialogTitle" TargetType="TextBlock">
-            <Setter Property="FontFamily" Value="Segoe UI Semibold"/>
-            <Setter Property="FontSize" Value="20"/>
-            <Setter Property="Foreground" Value="{StaticResource NothingInkBrush}"/>
-            <Setter Property="TextWrapping" Value="Wrap"/>
-        </Style>
-
-        <Style x:Key="NothingDialogBody" TargetType="TextBlock">
-            <Setter Property="FontFamily" Value="Segoe UI"/>
-            <Setter Property="FontSize" Value="15"/>
-            <Setter Property="Foreground" Value="#4A4A4A"/>
-            <Setter Property="TextWrapping" Value="Wrap"/>
-        </Style>
-
-        <Style x:Key="NothingPrimaryButton" TargetType="Button">
-            <Setter Property="Background" Value="{StaticResource NothingInkBrush}"/>
-            <Setter Property="Foreground" Value="White"/>
-            <Setter Property="FontFamily" Value="Segoe UI Semibold"/>
-            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="FontSize" Value="14"/>
             <Setter Property="Height" Value="48"/>
-            <Setter Property="MinWidth" Value="104"/>
+            <Setter Property="MinWidth" Value="108"/>
             <Setter Property="Padding" Value="20,0"/>
             <Setter Property="BorderThickness" Value="0"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
                         <Border x:Name="ButtonRoot" Background="{TemplateBinding Background}"
-                                CornerRadius="24" Padding="{TemplateBinding Padding}">
+                                CornerRadius="0" Padding="{TemplateBinding Padding}">
                             <VisualStateManager.VisualStateGroups>
                                 <VisualStateGroup x:Name="CommonStates">
                                     <VisualState x:Name="Normal"/>
@@ -89,14 +95,14 @@
                                         <Storyboard>
                                             <DoubleAnimation Storyboard.TargetName="ButtonRoot"
                                                              Storyboard.TargetProperty="Opacity"
-                                                             To="0.65" Duration="0:0:0.1"/>
+                                                             To="0.5" Duration="0:0:0.1"/>
                                         </Storyboard>
                                     </VisualState>
                                     <VisualState x:Name="Disabled">
                                         <Storyboard>
                                             <DoubleAnimation Storyboard.TargetName="ButtonRoot"
                                                              Storyboard.TargetProperty="Opacity"
-                                                             To="0.4" Duration="0:0:0.1"/>
+                                                             To="0.3" Duration="0:0:0.1"/>
                                         </Storyboard>
                                     </VisualState>
                                 </VisualStateGroup>
@@ -110,23 +116,24 @@
             </Setter>
         </Style>
 
-        <Style x:Key="NothingSecondaryButton" TargetType="Button">
+        <!-- Metro Secondary Button (Flat Rectangle, Bordered, 0 Radius) -->
+        <Style x:Key="MetroSecondaryButton" TargetType="Button">
             <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="Foreground" Value="{StaticResource NothingInkBrush}"/>
+            <Setter Property="Foreground" Value="#FFFFFF"/>
             <Setter Property="FontFamily" Value="Segoe UI Semibold"/>
-            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="FontSize" Value="14"/>
             <Setter Property="Height" Value="48"/>
-            <Setter Property="MinWidth" Value="104"/>
+            <Setter Property="MinWidth" Value="108"/>
             <Setter Property="Padding" Value="20,0"/>
-            <Setter Property="BorderBrush" Value="#D5D5D2"/>
-            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="BorderBrush" Value="#444444"/>
+            <Setter Property="BorderThickness" Value="1.5"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
                         <Border x:Name="ButtonRoot" Background="{TemplateBinding Background}"
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="24" Padding="{TemplateBinding Padding}">
+                                CornerRadius="0" Padding="{TemplateBinding Padding}">
                             <VisualStateManager.VisualStateGroups>
                                 <VisualStateGroup x:Name="CommonStates">
                                     <VisualState x:Name="Normal"/>
@@ -134,14 +141,14 @@
                                         <Storyboard>
                                             <DoubleAnimation Storyboard.TargetName="ButtonRoot"
                                                              Storyboard.TargetProperty="Opacity"
-                                                             To="0.55" Duration="0:0:0.1"/>
+                                                             To="0.5" Duration="0:0:0.1"/>
                                         </Storyboard>
                                     </VisualState>
                                     <VisualState x:Name="Disabled">
                                         <Storyboard>
                                             <DoubleAnimation Storyboard.TargetName="ButtonRoot"
                                                              Storyboard.TargetProperty="Opacity"
-                                                             To="0.4" Duration="0:0:0.1"/>
+                                                             To="0.3" Duration="0:0:0.1"/>
                                         </Storyboard>
                                     </VisualState>
                                 </VisualStateGroup>
@@ -154,6 +161,66 @@
                 </Setter.Value>
             </Setter>
         </Style>
+
+        <!-- Metro Text Styles -->
+        <Style x:Key="NothingSheetCaption" TargetType="TextBlock">
+            <Setter Property="FontFamily" Value="Segoe UI Semibold"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="Foreground" Value="#888888"/>
+        </Style>
+
+        <Style x:Key="NothingSheetTitle" TargetType="TextBlock">
+            <Setter Property="FontFamily" Value="Segoe UI Light"/>
+            <Setter Property="FontSize" Value="26"/>
+            <Setter Property="Foreground" Value="#FFFFFF"/>
+        </Style>
+
+        <Style x:Key="NothingRowTitle" TargetType="TextBlock">
+            <Setter Property="FontFamily" Value="Segoe UI Semibold"/>
+            <Setter Property="FontSize" Value="16"/>
+            <Setter Property="Foreground" Value="#FFFFFF"/>
+        </Style>
+
+        <Style x:Key="NothingRowCaption" TargetType="TextBlock">
+            <Setter Property="FontFamily" Value="Segoe UI"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Foreground" Value="#888888"/>
+        </Style>
+
+        <Style x:Key="NothingDialogTitle" TargetType="TextBlock">
+            <Setter Property="FontFamily" Value="Segoe UI Semilight"/>
+            <Setter Property="FontSize" Value="22"/>
+            <Setter Property="Foreground" Value="#FFFFFF"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+        </Style>
+
+        <Style x:Key="NothingDialogBody" TargetType="TextBlock">
+            <Setter Property="FontFamily" Value="Segoe UI"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="Foreground" Value="#888888"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+        </Style>
+
+        <!-- Metro Dialog Card (Sheet) Style -->
+        <Style x:Key="NothingSheetCard" TargetType="Border">
+            <Setter Property="Background" Value="#000000"/>
+            <Setter Property="CornerRadius" Value="0"/>
+            <Setter Property="BorderBrush" Value="#333333"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="24"/>
+        </Style>
+
+        <Style x:Key="NothingFloatingCard" TargetType="Border">
+            <Setter Property="Background" Value="#000000"/>
+            <Setter Property="CornerRadius" Value="0"/>
+            <Setter Property="BorderBrush" Value="#222222"/>
+            <Setter Property="BorderThickness" Value="0,1,0,0"/>
+            <Setter Property="Padding" Value="20,12"/>
+        </Style>
+
+        <!-- Button Aliases for Metro -->
+        <Style x:Key="NothingPrimaryButton" TargetType="Button" BasedOn="{StaticResource MetroPrimaryButton}"/>
+        <Style x:Key="NothingSecondaryButton" TargetType="Button" BasedOn="{StaticResource MetroSecondaryButton}"/>
 
         <Style x:Key="NothingRowButton" TargetType="Button">
             <Setter Property="Background" Value="Transparent"/>
@@ -163,7 +230,7 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
-                        <Border x:Name="ButtonRoot" Background="{TemplateBinding Background}" CornerRadius="16">
+                        <Border x:Name="ButtonRoot" Background="{TemplateBinding Background}" CornerRadius="0">
                             <VisualStateManager.VisualStateGroups>
                                 <VisualStateGroup x:Name="CommonStates">
                                     <VisualState x:Name="Normal"/>
@@ -171,14 +238,14 @@
                                         <Storyboard>
                                             <DoubleAnimation Storyboard.TargetName="ButtonRoot"
                                                              Storyboard.TargetProperty="Opacity"
-                                                             To="0.55" Duration="0:0:0.1"/>
+                                                             To="0.45" Duration="0:0:0.1"/>
                                         </Storyboard>
                                     </VisualState>
                                     <VisualState x:Name="Disabled">
                                         <Storyboard>
                                             <DoubleAnimation Storyboard.TargetName="ButtonRoot"
                                                              Storyboard.TargetProperty="Opacity"
-                                                             To="0.4" Duration="0:0:0.1"/>
+                                                             To="0.25" Duration="0:0:0.1"/>
                                         </Storyboard>
                                     </VisualState>
                                 </VisualStateGroup>
@@ -192,192 +259,52 @@
             </Setter>
         </Style>
 
-        <Style x:Key="NothingCloseButton" TargetType="Button">
-            <Setter Property="Background" Value="#0F000000"/>
-            <Setter Property="Foreground" Value="{StaticResource NothingInkBrush}"/>
+        <Style x:Key="NothingCloseButton" TargetType="Button" BasedOn="{StaticResource MetroIconButton}">
             <Setter Property="Width" Value="44"/>
             <Setter Property="Height" Value="44"/>
-            <Setter Property="Padding" Value="0"/>
-            <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Button">
-                        <Border x:Name="ButtonRoot" Background="{TemplateBinding Background}" CornerRadius="22">
-                            <VisualStateManager.VisualStateGroups>
-                                <VisualStateGroup x:Name="CommonStates">
-                                    <VisualState x:Name="Normal"/>
-                                    <VisualState x:Name="Pressed">
-                                        <Storyboard>
-                                            <DoubleAnimation Storyboard.TargetName="ButtonRoot"
-                                                             Storyboard.TargetProperty="Opacity"
-                                                             To="0.55" Duration="0:0:0.1"/>
-                                        </Storyboard>
-                                    </VisualState>
-                                    <VisualState x:Name="Disabled">
-                                        <Storyboard>
-                                            <DoubleAnimation Storyboard.TargetName="ButtonRoot"
-                                                             Storyboard.TargetProperty="Opacity"
-                                                             To="0.4" Duration="0:0:0.1"/>
-                                        </Storyboard>
-                                    </VisualState>
-                                </VisualStateGroup>
-                            </VisualStateManager.VisualStateGroups>
-                            <ContentPresenter Content="{TemplateBinding Content}"
-                                              ContentTemplate="{TemplateBinding ContentTemplate}"
-                                              HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                        </Border>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
         </Style>
 
-        <Style x:Key="NothingFloatingCard" TargetType="Border">
-            <Setter Property="Background" Value="{StaticResource NothingWhiteBrush}"/>
-            <Setter Property="CornerRadius" Value="26"/>
-            <Setter Property="BorderBrush" Value="{StaticResource NothingBorderLightBrush}"/>
-            <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="Padding" Value="18"/>
-        </Style>
-
-        <Style x:Key="NothingActionTile" TargetType="Button">
-            <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="Padding" Value="0"/>
-            <Setter Property="Height" Value="76"/>
-            <Setter Property="HorizontalContentAlignment" Value="Center"/>
-            <Setter Property="VerticalContentAlignment" Value="Center"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Button">
-                        <Border x:Name="ButtonRoot" Background="{TemplateBinding Background}" CornerRadius="16">
-                            <VisualStateManager.VisualStateGroups>
-                                <VisualStateGroup x:Name="CommonStates">
-                                    <VisualState x:Name="Normal"/>
-                                    <VisualState x:Name="Pressed">
-                                        <Storyboard>
-                                            <DoubleAnimation Storyboard.TargetName="ButtonRoot"
-                                                             Storyboard.TargetProperty="Opacity"
-                                                             To="0.55" Duration="0:0:0.1"/>
-                                        </Storyboard>
-                                    </VisualState>
-                                    <VisualState x:Name="Disabled">
-                                        <Storyboard>
-                                            <DoubleAnimation Storyboard.TargetName="ButtonRoot"
-                                                             Storyboard.TargetProperty="Opacity"
-                                                             To="0.4" Duration="0:0:0.1"/>
-                                        </Storyboard>
-                                    </VisualState>
-                                </VisualStateGroup>
-                            </VisualStateManager.VisualStateGroups>
-                            <ContentPresenter Content="{TemplateBinding Content}"
-                                              ContentTemplate="{TemplateBinding ContentTemplate}"
-                                              HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                        </Border>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
+        <Style x:Key="NothingActionTile" TargetType="Button" BasedOn="{StaticResource MetroIconButton}">
+            <Setter Property="Height" Value="56"/>
         </Style>
 
         <Style x:Key="NothingActionTileLabel" TargetType="TextBlock">
             <Setter Property="FontFamily" Value="Segoe UI Semibold"/>
             <Setter Property="FontSize" Value="10"/>
-            <Setter Property="Foreground" Value="{StaticResource NothingInkBrush}"/>
+            <Setter Property="Foreground" Value="#FFFFFF"/>
             <Setter Property="HorizontalAlignment" Value="Center"/>
             <Setter Property="TextAlignment" Value="Center"/>
-            <Setter Property="Margin" Value="0,7,0,0"/>
+            <Setter Property="Margin" Value="0,4,0,0"/>
         </Style>
 
-        <Style x:Key="NothingDarkPillButton" TargetType="Button">
-            <Setter Property="Background" Value="#232323"/>
-            <Setter Property="Foreground" Value="{StaticResource NothingWhiteBrush}"/>
+        <Style x:Key="NothingDarkPillButton" TargetType="Button" BasedOn="{StaticResource MetroSecondaryButton}">
             <Setter Property="Height" Value="44"/>
-            <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="Padding" Value="12,0"/>
-            <Setter Property="HorizontalContentAlignment" Value="Center"/>
-            <Setter Property="VerticalContentAlignment" Value="Center"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Button">
-                        <Border x:Name="ButtonRoot" Background="{TemplateBinding Background}" CornerRadius="22"
-                                Padding="{TemplateBinding Padding}">
-                            <VisualStateManager.VisualStateGroups>
-                                <VisualStateGroup x:Name="CommonStates">
-                                    <VisualState x:Name="Normal"/>
-                                    <VisualState x:Name="Pressed">
-                                        <Storyboard>
-                                            <DoubleAnimation Storyboard.TargetName="ButtonRoot"
-                                                             Storyboard.TargetProperty="Opacity"
-                                                             To="0.6" Duration="0:0:0.1"/>
-                                        </Storyboard>
-                                    </VisualState>
-                                    <VisualState x:Name="Disabled">
-                                        <Storyboard>
-                                            <DoubleAnimation Storyboard.TargetName="ButtonRoot"
-                                                             Storyboard.TargetProperty="Opacity"
-                                                             To="0.4" Duration="0:0:0.1"/>
-                                        </Storyboard>
-                                    </VisualState>
-                                </VisualStateGroup>
-                            </VisualStateManager.VisualStateGroups>
-                            <ContentPresenter Content="{TemplateBinding Content}"
-                                              ContentTemplate="{TemplateBinding ContentTemplate}"
-                                              HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                        </Border>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
+            <Setter Property="Padding" Value="16,0"/>
         </Style>
 
         <Style x:Key="NothingDarkPillLabel" TargetType="TextBlock">
             <Setter Property="FontFamily" Value="Segoe UI Semibold"/>
-            <Setter Property="FontSize" Value="10"/>
-            <Setter Property="Foreground" Value="{StaticResource NothingWhiteBrush}"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="Foreground" Value="#FFFFFF"/>
             <Setter Property="VerticalAlignment" Value="Center"/>
             <Setter Property="Margin" Value="8,0,0,0"/>
         </Style>
 
-        <Style x:Key="NothingAuthField" TargetType="TextBox">
-            <Setter Property="Background" Value="{StaticResource NothingGraphiteRaisedBrush}"/>
-            <Setter Property="Foreground" Value="{StaticResource NothingWhiteBrush}"/>
-            <Setter Property="BorderBrush" Value="{StaticResource NothingBorderDarkBrush}"/>
-            <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="FontFamily" Value="Segoe UI"/>
-            <Setter Property="FontSize" Value="20"/>
-            <Setter Property="Height" Value="52"/>
-            <Setter Property="Padding" Value="14,0"/>
-            <Setter Property="VerticalContentAlignment" Value="Center"/>
-        </Style>
-
-        <Style x:Key="NothingAuthPasswordField" TargetType="PasswordBox">
-            <Setter Property="Background" Value="{StaticResource NothingGraphiteRaisedBrush}"/>
-            <Setter Property="Foreground" Value="{StaticResource NothingWhiteBrush}"/>
-            <Setter Property="BorderBrush" Value="{StaticResource NothingBorderDarkBrush}"/>
-            <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="FontFamily" Value="Segoe UI"/>
-            <Setter Property="FontSize" Value="20"/>
-            <Setter Property="Height" Value="52"/>
-            <Setter Property="Padding" Value="14,0"/>
-            <Setter Property="VerticalContentAlignment" Value="Center"/>
-        </Style>
-
-        <Style x:Key="NothingLightPillButton" TargetType="Button" BasedOn="{StaticResource NothingDarkPillButton}">
-            <Setter Property="Background" Value="{StaticResource NothingWhiteBrush}"/>
-            <Setter Property="Foreground" Value="{StaticResource NothingInkBrush}"/>
-            <Setter Property="Height" Value="50"/>
+        <Style x:Key="NothingLightPillButton" TargetType="Button" BasedOn="{StaticResource MetroPrimaryButton}">
+            <Setter Property="Height" Value="48"/>
         </Style>
 
         <Style x:Key="NothingLightPillLabel" TargetType="TextBlock">
             <Setter Property="FontFamily" Value="Segoe UI Semibold"/>
-            <Setter Property="FontSize" Value="12"/>
-            <Setter Property="Foreground" Value="{StaticResource NothingInkBrush}"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Foreground" Value="#000000"/>
             <Setter Property="VerticalAlignment" Value="Center"/>
         </Style>
 
         <Style x:Key="NothingLinkButton" TargetType="Button">
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="Padding" Value="0"/>
-            <Setter Property="Height" Value="28"/>
+            <Setter Property="Padding" Value="8,4"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
@@ -389,14 +316,14 @@
                                         <Storyboard>
                                             <DoubleAnimation Storyboard.TargetName="ButtonRoot"
                                                              Storyboard.TargetProperty="Opacity"
-                                                             To="0.55" Duration="0:0:0.1"/>
+                                                             To="0.45" Duration="0:0:0.1"/>
                                         </Storyboard>
                                     </VisualState>
                                     <VisualState x:Name="Disabled">
                                         <Storyboard>
                                             <DoubleAnimation Storyboard.TargetName="ButtonRoot"
                                                              Storyboard.TargetProperty="Opacity"
-                                                             To="0.4" Duration="0:0:0.1"/>
+                                                             To="0.25" Duration="0:0:0.1"/>
                                         </Storyboard>
                                     </VisualState>
                                 </VisualStateGroup>
@@ -412,12 +339,127 @@
 
         <Style x:Key="NothingLinkLabel" TargetType="TextBlock">
             <Setter Property="FontFamily" Value="Segoe UI Semibold"/>
-            <Setter Property="FontSize" Value="10"/>
-            <Setter Property="Foreground" Value="{StaticResource NothingMutedDarkBrush}"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="Foreground" Value="#888888"/>
             <Setter Property="VerticalAlignment" Value="Center"/>
         </Style>
-    </Application.Resources>
 
+        <!-- Metro Input Styles (Custom ControlTemplates: no white-on-white focus bug, no descender clipping) -->
+        <Style x:Key="NothingAuthField" TargetType="TextBox">
+            <Setter Property="FontFamily" Value="Segoe UI"/>
+            <Setter Property="FontSize" Value="20"/>
+            <Setter Property="Background" Value="#000000"/>
+            <Setter Property="Foreground" Value="#FFFFFF"/>
+            <Setter Property="BorderBrush" Value="#444444"/>
+            <Setter Property="BorderThickness" Value="1.5"/>
+            <Setter Property="Height" Value="56"/>
+            <Setter Property="Padding" Value="12,2"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TextBox">
+                        <Grid Background="Transparent">
+                            <VisualStateManager.VisualStateGroups>
+                                <VisualStateGroup x:Name="CommonStates">
+                                    <VisualState x:Name="Normal"/>
+                                    <VisualState x:Name="MouseOver"/>
+                                    <VisualState x:Name="Disabled">
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetName="BorderElement"
+                                                             Storyboard.TargetProperty="Opacity"
+                                                             To="0.35" Duration="0"/>
+                                        </Storyboard>
+                                    </VisualState>
+                                    <VisualState x:Name="ReadOnly"/>
+                                </VisualStateGroup>
+                                <VisualStateGroup x:Name="FocusStates">
+                                    <VisualState x:Name="Focused">
+                                        <Storyboard>
+                                            <ObjectAnimationUsingKeyFrames Storyboard.TargetName="BorderElement" Storyboard.TargetProperty="BorderBrush">
+                                                <DiscreteObjectKeyFrame KeyTime="0" Value="#FFFFFF"/>
+                                            </ObjectAnimationUsingKeyFrames>
+                                            <ObjectAnimationUsingKeyFrames Storyboard.TargetName="BorderElement" Storyboard.TargetProperty="Background">
+                                                <DiscreteObjectKeyFrame KeyTime="0" Value="#0A0A0A"/>
+                                            </ObjectAnimationUsingKeyFrames>
+                                        </Storyboard>
+                                    </VisualState>
+                                    <VisualState x:Name="Unfocused"/>
+                                </VisualStateGroup>
+                            </VisualStateManager.VisualStateGroups>
+                            <Border x:Name="BorderElement"
+                                    Background="{TemplateBinding Background}"
+                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                    BorderThickness="{TemplateBinding BorderThickness}"
+                                    CornerRadius="0">
+                                <Border x:Name="ContentElement"
+                                        VerticalAlignment="Center"
+                                        BorderThickness="0"
+                                        Padding="{TemplateBinding Padding}"
+                                        Margin="0"/>
+                            </Border>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="NothingAuthPasswordField" TargetType="PasswordBox">
+            <Setter Property="FontFamily" Value="Segoe UI"/>
+            <Setter Property="FontSize" Value="20"/>
+            <Setter Property="Background" Value="#000000"/>
+            <Setter Property="Foreground" Value="#FFFFFF"/>
+            <Setter Property="BorderBrush" Value="#444444"/>
+            <Setter Property="BorderThickness" Value="1.5"/>
+            <Setter Property="Height" Value="56"/>
+            <Setter Property="Padding" Value="12,2"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="PasswordBox">
+                        <Grid Background="Transparent">
+                            <VisualStateManager.VisualStateGroups>
+                                <VisualStateGroup x:Name="CommonStates">
+                                    <VisualState x:Name="Normal"/>
+                                    <VisualState x:Name="MouseOver"/>
+                                    <VisualState x:Name="Disabled">
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetName="BorderElement"
+                                                             Storyboard.TargetProperty="Opacity"
+                                                             To="0.35" Duration="0"/>
+                                        </Storyboard>
+                                    </VisualState>
+                                </VisualStateGroup>
+                                <VisualStateGroup x:Name="FocusStates">
+                                    <VisualState x:Name="Focused">
+                                        <Storyboard>
+                                            <ObjectAnimationUsingKeyFrames Storyboard.TargetName="BorderElement" Storyboard.TargetProperty="BorderBrush">
+                                                <DiscreteObjectKeyFrame KeyTime="0" Value="#FFFFFF"/>
+                                            </ObjectAnimationUsingKeyFrames>
+                                            <ObjectAnimationUsingKeyFrames Storyboard.TargetName="BorderElement" Storyboard.TargetProperty="Background">
+                                                <DiscreteObjectKeyFrame KeyTime="0" Value="#0A0A0A"/>
+                                            </ObjectAnimationUsingKeyFrames>
+                                        </Storyboard>
+                                    </VisualState>
+                                    <VisualState x:Name="Unfocused"/>
+                                </VisualStateGroup>
+                            </VisualStateManager.VisualStateGroups>
+                            <Border x:Name="BorderElement"
+                                    Background="{TemplateBinding Background}"
+                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                    BorderThickness="{TemplateBinding BorderThickness}"
+                                    CornerRadius="0">
+                                <Border x:Name="ContentElement"
+                                        VerticalAlignment="Center"
+                                        BorderThickness="0"
+                                        Padding="{TemplateBinding Padding}"
+                                        Margin="0"/>
+                            </Border>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Application.Resources>
 
     <Application.ApplicationLifetimeObjects>
         <!--Required object that handles lifetime events for the application-->
