@@ -335,6 +335,87 @@
             <Setter Property="VerticalAlignment" Value="Center"/>
             <Setter Property="Margin" Value="8,0,0,0"/>
         </Style>
+
+        <Style x:Key="NothingAuthField" TargetType="TextBox">
+            <Setter Property="Background" Value="{StaticResource NothingGraphiteRaisedBrush}"/>
+            <Setter Property="Foreground" Value="{StaticResource NothingWhiteBrush}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource NothingBorderDarkBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="FontFamily" Value="Segoe UI"/>
+            <Setter Property="FontSize" Value="20"/>
+            <Setter Property="Height" Value="52"/>
+            <Setter Property="Padding" Value="14,0"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+        </Style>
+
+        <Style x:Key="NothingAuthPasswordField" TargetType="PasswordBox">
+            <Setter Property="Background" Value="{StaticResource NothingGraphiteRaisedBrush}"/>
+            <Setter Property="Foreground" Value="{StaticResource NothingWhiteBrush}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource NothingBorderDarkBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="FontFamily" Value="Segoe UI"/>
+            <Setter Property="FontSize" Value="20"/>
+            <Setter Property="Height" Value="52"/>
+            <Setter Property="Padding" Value="14,0"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+        </Style>
+
+        <Style x:Key="NothingLightPillButton" TargetType="Button" BasedOn="{StaticResource NothingDarkPillButton}">
+            <Setter Property="Background" Value="{StaticResource NothingWhiteBrush}"/>
+            <Setter Property="Foreground" Value="{StaticResource NothingInkBrush}"/>
+            <Setter Property="Height" Value="50"/>
+        </Style>
+
+        <Style x:Key="NothingLightPillLabel" TargetType="TextBlock">
+            <Setter Property="FontFamily" Value="Segoe UI Semibold"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Foreground" Value="{StaticResource NothingInkBrush}"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+
+        <Style x:Key="NothingLinkButton" TargetType="Button">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="Height" Value="28"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="ButtonRoot" Background="Transparent">
+                            <VisualStateManager.VisualStateGroups>
+                                <VisualStateGroup x:Name="CommonStates">
+                                    <VisualState x:Name="Normal"/>
+                                    <VisualState x:Name="Pressed">
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetName="ButtonRoot"
+                                                             Storyboard.TargetProperty="Opacity"
+                                                             To="0.55" Duration="0:0:0.1"/>
+                                        </Storyboard>
+                                    </VisualState>
+                                    <VisualState x:Name="Disabled">
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetName="ButtonRoot"
+                                                             Storyboard.TargetProperty="Opacity"
+                                                             To="0.4" Duration="0:0:0.1"/>
+                                        </Storyboard>
+                                    </VisualState>
+                                </VisualStateGroup>
+                            </VisualStateManager.VisualStateGroups>
+                            <ContentPresenter Content="{TemplateBinding Content}"
+                                              ContentTemplate="{TemplateBinding ContentTemplate}"
+                                              HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="NothingLinkLabel" TargetType="TextBlock">
+            <Setter Property="FontFamily" Value="Segoe UI Semibold"/>
+            <Setter Property="FontSize" Value="10"/>
+            <Setter Property="Foreground" Value="{StaticResource NothingMutedDarkBrush}"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
     </Application.Resources>
 
 

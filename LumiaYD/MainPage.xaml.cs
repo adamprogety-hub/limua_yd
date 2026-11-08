@@ -7,11 +7,14 @@ using System.Windows.Media.Animation;
 using System.Windows.Threading;
 using Microsoft.Phone.Controls;
 using Microsoft.Phone.Shell;
+using Microsoft.Phone.Tasks;
 using System.IO.IsolatedStorage;
 using System.Net;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Globalization;
+using System.Windows.Input;
 using Microsoft.Xna.Framework.Media;
 using System.IO;
 using System.Text;
@@ -31,6 +34,8 @@ namespace LumiaYD
         private const string PendingDownloadNameKey = "PendingDownloadName";
         private const string PendingDownloadHrefKey = "PendingDownloadHref";
         private const string PendingDownloadIsFolderKey = "PendingDownloadIsFolder";
+        private const string TransferHistoryKey = "TransferHistory";
+        private const int TransferHistoryLimit = 40;
         private const long DownloadChunkSize = 8L * 1024 * 1024;
         private const int DownloadMaxAttempts = 5;
 
@@ -41,7 +46,8 @@ namespace LumiaYD
         private string currentPath = "/";
         private YandexFileItem selectedItem = null;
         private YandexFileItem _pendingDownloadFile;
-        private readonly ObservableCollection<TransferItem> _transfers = new ObservableCollection<TransferItem>();
+        private readonly ObservableCollection<TransferItem> _activeTransfers = new ObservableCollection<TransferItem>();
+        private readonly ObservableCollection<TransferItem> _completedTransfers = new ObservableCollection<TransferItem>();
 
         private YandexWebDavClient _webDav;
         private QuotaInfo _quota;
@@ -65,23 +71,52 @@ namespace LumiaYD
         private bool _selectedIslandOpen;
         private int _selectedIslandVersion;
         private DateTime _suppressTapUntil;
+        private bool _transferIslandOpen;
+        private int _transferIslandVersion;
+        private TransferItem _transferIslandItem;
+        private bool _passwordVisible;
+        private bool _syncingPassword;
 
         public MainPage()
         {
             InitializeComponent();
             this.BackKeyPress += MainPage_BackKeyPress;
 
-            TransferListBox.ItemsSource = _transfers;
-            _transfers.CollectionChanged += (s, e) => UpdateTransfersEmptyState();
-            UpdateTransfersEmptyState();
+            ActiveTransfersList.ItemsSource = _activeTransfers;
+            CompletedTransfersList.ItemsSource = _completedTransfers;
+            _activeTransfers.CollectionChanged += (s, e) => UpdateTransfersSections();
+            _completedTransfers.CollectionChanged += (s, e) => UpdateTransfersSections();
+            LoadTransferHistory();
+            UpdateTransfersSections();
 
             _directoryCollapseTimer.Interval = TimeSpan.FromSeconds(6);
             _directoryCollapseTimer.Tick += DirectoryCollapseTimer_Tick;
         }
 
-        private void UpdateTransfersEmptyState()
+        private void OpenCloudFromTransfers_Click(object sender, RoutedEventArgs e)
         {
-            SyncStatusText.Visibility = _transfers.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+            MainPivot.SelectedIndex = 0;
+        }
+
+        private void UpdateTransfersSections()
+        {
+            if (ActiveTransfersSection == null)
+            {
+                return;
+            }
+
+            bool hasActive = _activeTransfers.Count > 0;
+            bool hasCompleted = _completedTransfers.Count > 0;
+
+            ActiveTransfersSection.Visibility = hasActive ? Visibility.Visible : Visibility.Collapsed;
+            CompletedTransfersSection.Visibility = hasCompleted ? Visibility.Visible : Visibility.Collapsed;
+            TransfersEmptyState.Visibility = (!hasActive && !hasCompleted)
+                ? Visibility.Visible
+                : Visibility.Collapsed;
+            ClearCompletedButton.Visibility = hasCompleted ? Visibility.Visible : Visibility.Collapsed;
+
+            ActiveTransfersTitle.Text = "АКТИВНЫЕ · " + _activeTransfers.Count;
+            CompletedTransfersTitle.Text = "ЗАВЕРШЁННЫЕ · " + _completedTransfers.Count;
         }
 
         private void MainPage_BackKeyPress(object sender, System.ComponentModel.CancelEventArgs e)
@@ -97,6 +132,13 @@ namespace LumiaYD
             {
                 e.Cancel = true;
                 HideAccountMenu();
+                return;
+            }
+
+            if (_transferIslandOpen)
+            {
+                e.Cancel = true;
+                HideTransferIsland();
                 return;
             }
 
@@ -191,6 +233,11 @@ namespace LumiaYD
                 LoadDiagnostics();
             }
 
+            if (MainPivot.SelectedIndex != 1 && _transferIslandOpen)
+            {
+                HideTransferIslandImmediate();
+            }
+
             UpdateBottomIslandsVisibility();
         }
 
@@ -267,43 +314,196 @@ namespace LumiaYD
             AuthArea.Visibility = Visibility.Visible;
             MainPivot.Visibility = Visibility.Collapsed;
             ResetBottomIslands();
+            HideTransferIslandImmediate();
+
+            _syncingPassword = true;
             LoginTextBox.Text = _login ?? "";
             PasswordBox.Password = _password ?? "";
-            StatusText.Text = "ВВЕДИТЕ ЛОГИН И ПАРОЛЬ ПРИЛОЖЕНИЯ";
+            PasswordTextBox.Text = _password ?? "";
+            _syncingPassword = false;
+            ApplyPasswordVisibility(false);
+
+            SetAuthStatus("ВВЕДИТЕ ЛОГИН И ПАРОЛЬ ПРИЛОЖЕНИЯ", false);
             AuthProgress.Visibility = Visibility.Collapsed;
             LoginButton.IsEnabled = true;
+            LoginButtonLabel.Text = "ВОЙТИ";
+        }
+
+        private void ApplyPasswordVisibility(bool visible)
+        {
+            _syncingPassword = true;
+            if (visible)
+            {
+                PasswordTextBox.Text = PasswordBox.Password;
+            }
+            else
+            {
+                PasswordBox.Password = PasswordTextBox.Text;
+            }
+            _syncingPassword = false;
+
+            _passwordVisible = visible;
+            PasswordBox.Visibility = visible ? Visibility.Collapsed : Visibility.Visible;
+            PasswordTextBox.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
+            PasswordRevealLabel.Text = visible ? "СКРЫТЬ" : "ПОКАЗАТЬ";
+        }
+
+        private string GetEnteredPassword()
+        {
+            return _passwordVisible ? PasswordTextBox.Text : PasswordBox.Password;
+        }
+
+        private void SetAuthStatus(string text, bool isError)
+        {
+            StatusText.Text = text;
+            StatusText.Foreground = isError
+                ? (Brush)Application.Current.Resources["NothingRedBrush"]
+                : (Brush)Application.Current.Resources["NothingMutedDarkBrush"];
+        }
+
+        private void PasswordRevealButton_Click(object sender, RoutedEventArgs e)
+        {
+            bool show = !_passwordVisible;
+            ApplyPasswordVisibility(show);
+
+            if (show)
+            {
+                PasswordTextBox.Focus();
+                PasswordTextBox.SelectionStart = PasswordTextBox.Text.Length;
+            }
+            else
+            {
+                PasswordBox.Focus();
+            }
+        }
+
+        private void PasswordBox_PasswordChanged(object sender, RoutedEventArgs e)
+        {
+            if (_syncingPassword || !_passwordVisible)
+            {
+                return;
+            }
+
+            _syncingPassword = true;
+            PasswordTextBox.Text = PasswordBox.Password;
+            _syncingPassword = false;
+        }
+
+        private void PasswordTextBox_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            if (_syncingPassword || !_passwordVisible)
+            {
+                return;
+            }
+
+            _syncingPassword = true;
+            PasswordBox.Password = PasswordTextBox.Text;
+            _syncingPassword = false;
+        }
+
+        private void LoginTextBox_KeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key == Key.Enter)
+            {
+                e.Handled = true;
+                TriggerLogin();
+            }
+        }
+
+        private void PasswordBox_KeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key == Key.Enter)
+            {
+                e.Handled = true;
+                TriggerLogin();
+            }
+        }
+
+        private void PasswordTextBox_KeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key == Key.Enter)
+            {
+                e.Handled = true;
+                TriggerLogin();
+            }
+        }
+
+        private async void TriggerLogin()
+        {
+            if (!LoginButton.IsEnabled)
+            {
+                return;
+            }
+
+            await SubmitLoginAsync();
+        }
+
+        private void OpenAppPasswordHelp_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var task = new WebBrowserTask();
+                task.Uri = new Uri("https://id.yandex.ru/security/app-passwords");
+                task.Show();
+            }
+            catch (Exception ex)
+            {
+                App.Log("auth help failed: " + ex.Message);
+                SetAuthStatus("НЕ УДАЛОСЬ ОТКРЫТЬ БРАУЗЕР.", true);
+            }
         }
 
         private async void LoginButton_Click(object sender, RoutedEventArgs e)
         {
+            await SubmitLoginAsync();
+        }
+
+        private async Task SubmitLoginAsync()
+        {
+            if (!LoginButton.IsEnabled)
+            {
+                return;
+            }
+
             string login = LoginTextBox.Text.Trim();
-            string password = PasswordBox.Password;
+            string password = GetEnteredPassword();
 
             if (string.IsNullOrEmpty(login) || string.IsNullOrEmpty(password))
             {
-                StatusText.Text = "ЗАПОЛНИТЕ ЛОГИН И ПАРОЛЬ.";
+                SetAuthStatus("ЗАПОЛНИТЕ ЛОГИН И ПАРОЛЬ.", true);
                 return;
             }
 
             LoginButton.IsEnabled = false;
+            LoginButtonLabel.Text = "ПРОВЕРКА...";
             AuthProgress.Visibility = Visibility.Visible;
-            StatusText.Text = "ПРОВЕРКА...";
+            SetAuthStatus("ПРОВЕРКА ПОДКЛЮЧЕНИЯ...", false);
 
             bool? ok = await TestCredentialsAsync(login, password);
 
             AuthProgress.Visibility = Visibility.Collapsed;
             LoginButton.IsEnabled = true;
+            LoginButtonLabel.Text = "ВОЙТИ";
 
             if (ok == true)
             {
                 _login = login;
                 _password = password;
                 SaveCredentials();
+                ApplyPasswordVisibility(false);
                 ShowMainInterface();
             }
             else if (ok == false)
             {
-                StatusText.Text = "НЕВЕРНЫЙ ЛОГИН ИЛИ ПАРОЛЬ ПРИЛОЖЕНИЯ.";
+                SetAuthStatus("НЕВЕРНЫЙ ЛОГИН ИЛИ ПАРОЛЬ ПРИЛОЖЕНИЯ.", true);
+                if (_passwordVisible)
+                {
+                    PasswordTextBox.Focus();
+                }
+                else
+                {
+                    PasswordBox.Focus();
+                }
             }
         }
 
@@ -322,12 +522,12 @@ namespace LumiaYD
                     return false;
                 }
 
-                StatusText.Text = "ОШИБКА СЕТИ: " + ex.Message;
+                SetAuthStatus("ОШИБКА СЕТИ: " + ex.Message, true);
                 return null;
             }
             catch (Exception ex)
             {
-                StatusText.Text = "ОШИБКА: " + ex.Message;
+                SetAuthStatus("ОШИБКА: " + ex.Message, true);
                 return null;
             }
         }
@@ -356,6 +556,12 @@ namespace LumiaYD
 
         private void HandleUnauthorized()
         {
+            if (AuthArea.Visibility == Visibility.Visible)
+            {
+                return;
+            }
+
+            string lastLogin = _login;
             CloseOverlaysImmediate();
             ClearCredentials();
             _quota = null;
@@ -363,11 +569,13 @@ namespace LumiaYD
             UpdateAccountMenu();
             _pendingDownloadFile = null;
             ClearPendingDownload();
-            _transfers.Clear();
+            CancelAndClearActiveTransfers();
+            HideTransferIslandImmediate();
             FilesListBox.ItemsSource = null;
             MainPivot.Visibility = Visibility.Collapsed;
             ShowAuth();
-            StatusText.Text = "ПАРОЛЬ НЕ ПОДОШЁЛ ИЛИ СЕССИЯ ИСТЕКЛА. ВОЙДИТЕ СНОВА.";
+            LoginTextBox.Text = lastLogin ?? "";
+            SetAuthStatus("ПАРОЛЬ НЕ ПОДОШЁЛ ИЛИ СЕССИЯ ИСТЕКЛА. ВОЙДИТЕ СНОВА.", true);
         }
 
         private void AccountBlock_Tap(object sender, System.Windows.Input.GestureEventArgs e)
@@ -895,7 +1103,8 @@ namespace LumiaYD
             ClearCredentials();
             _pendingDownloadFile = null;
             ClearPendingDownload();
-            _transfers.Clear();
+            ClearAllTransfers(true);
+            HideTransferIslandImmediate();
             FilesListBox.ItemsSource = null;
             currentPath = "/";
             SaveSetting(CurrentPathKey, "/");
@@ -908,6 +1117,7 @@ namespace LumiaYD
 
         private void ShowMainInterface()
         {
+            this.Focus();
             AuthArea.Visibility = Visibility.Collapsed;
             MainPivot.Visibility = Visibility.Visible;
             CurrentAccountText.Text = _login;
@@ -1324,28 +1534,49 @@ namespace LumiaYD
                 return;
             }
 
-            bool visible = MainPivot.Visibility == Visibility.Visible && MainPivot.SelectedIndex == 0;
+            bool cloudTab = MainPivot.Visibility == Visibility.Visible && MainPivot.SelectedIndex == 0;
+            bool transfersTab = MainPivot.Visibility == Visibility.Visible && MainPivot.SelectedIndex == 1;
+            bool visible = cloudTab || (transfersTab && _transferIslandOpen);
             if (!visible)
             {
                 _directoryCollapseTimer.Stop();
                 BottomIslands.Visibility = Visibility.Collapsed;
                 UpdateBottomIslandsPadding();
+                UpdateTransfersBottomPadding();
                 return;
+            }
+
+            if (!cloudTab)
+            {
+                _directoryCollapseTimer.Stop();
             }
 
             BottomIslands.Visibility = Visibility.Visible;
             ApplyBottomIslandState();
             UpdateBottomIslandsPadding();
-            RestartDirectoryCollapseTimer();
+            UpdateTransfersBottomPadding();
+            if (cloudTab)
+            {
+                RestartDirectoryCollapseTimer();
+            }
         }
 
         private void ApplyBottomIslandState()
         {
-            SelectedIsland.Visibility = _selectedIslandOpen ? Visibility.Visible : Visibility.Collapsed;
+            bool cloudTab = MainPivot.SelectedIndex == 0;
+            bool transfersTab = MainPivot.SelectedIndex == 1;
 
-            bool showDirectory = !_selectedIslandOpen;
+            SelectedIsland.Visibility = (cloudTab && _selectedIslandOpen)
+                ? Visibility.Visible
+                : Visibility.Collapsed;
+
+            bool showDirectory = cloudTab && !_selectedIslandOpen;
             DirectoryIsland.Visibility = (showDirectory && _directoryExpanded) ? Visibility.Visible : Visibility.Collapsed;
             DirectoryMicroIsland.Visibility = (showDirectory && !_directoryExpanded) ? Visibility.Visible : Visibility.Collapsed;
+
+            TransferIsland.Visibility = (transfersTab && _transferIslandOpen)
+                ? Visibility.Visible
+                : Visibility.Collapsed;
         }
 
         private void ResetBottomIslands()
@@ -1361,8 +1592,10 @@ namespace LumiaYD
             SelectedIsland.IsHitTestVisible = true;
             DirectoryIsland.Visibility = Visibility.Collapsed;
             DirectoryMicroIsland.Visibility = Visibility.Collapsed;
+            TransferIsland.Visibility = Visibility.Collapsed;
             ClearDimming();
             UpdateBottomIslandsPadding();
+            UpdateTransfersBottomPadding();
         }
 
         private void UpdateBottomIslandsPadding()
@@ -1387,6 +1620,17 @@ namespace LumiaYD
             }
 
             FilesListBox.Margin = new Thickness(0, 0, 0, bottom);
+        }
+
+        private void UpdateTransfersBottomPadding()
+        {
+            if (TransfersScrollViewer == null)
+            {
+                return;
+            }
+
+            double bottom = (_transferIslandOpen && MainPivot.SelectedIndex == 1) ? 180 : 0;
+            TransfersScrollViewer.Margin = new Thickness(0, 0, 0, bottom);
         }
 
         private void ShowDirectoryIsland()
@@ -1449,6 +1693,182 @@ namespace LumiaYD
             _directoryCollapseTimer.Stop();
             DirectoryIsland.Visibility = Visibility.Collapsed;
             DirectoryMicroIsland.Visibility = Visibility.Collapsed;
+        }
+
+        private void TransferRow_Tap(object sender, System.Windows.Input.GestureEventArgs e)
+        {
+            e.Handled = true;
+
+            var element = sender as FrameworkElement;
+            TransferItem item = element != null ? element.DataContext as TransferItem : null;
+            if (item == null)
+            {
+                return;
+            }
+
+            ShowTransferIsland(item);
+        }
+
+        private void ShowTransferIsland(TransferItem transfer)
+        {
+            if (transfer == null)
+            {
+                return;
+            }
+
+            bool wasOpen = _transferIslandOpen;
+
+            if (_transferIslandItem != null)
+            {
+                _transferIslandItem.PropertyChanged -= TransferIslandItem_PropertyChanged;
+            }
+
+            _transferIslandItem = transfer;
+            _transferIslandItem.PropertyChanged += TransferIslandItem_PropertyChanged;
+            _transferIslandOpen = true;
+
+            UpdateTransferIslandContent();
+            UpdateBottomIslandsVisibility();
+
+            TransferIsland.IsHitTestVisible = true;
+
+            if (!wasOpen)
+            {
+                TransferIsland.Opacity = 0;
+                SetTranslate(TransferIsland, 0, 14);
+
+                Storyboard storyboard = new Storyboard();
+                AddOpacityAnimation(storyboard, TransferIsland, 0, 1, 150);
+                AddTranslateYAnimation(storyboard, TransferIsland, 0, 170);
+                storyboard.Begin();
+            }
+            else
+            {
+                TransferIsland.Opacity = 1;
+                SetTranslate(TransferIsland, 0, 0);
+            }
+        }
+
+        private void TransferIslandItem_PropertyChanged(object sender, PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName == "State" || e.PropertyName == "StatusText" ||
+                e.PropertyName == "ProgressText" || e.PropertyName == "IconColor")
+            {
+                UpdateTransferIslandContent();
+            }
+        }
+
+        private void UpdateTransferIslandContent()
+        {
+            TransferItem item = _transferIslandItem;
+            if (item == null)
+            {
+                return;
+            }
+
+            TransferIslandTitle.Text = item.FileName;
+            TransferIslandSubtitle.Text = string.IsNullOrEmpty(item.TargetText)
+                ? item.StatusText
+                : item.TargetText + " · " + item.StatusText;
+            TransferIslandIcon.Text = item.IconGlyph;
+
+            bool running = item.IsRunning;
+            bool canRetry = !running && item.CanRetry;
+
+            TransferRunningActions.Visibility = running ? Visibility.Visible : Visibility.Collapsed;
+            TransferRetryRemoveActions.Visibility = canRetry ? Visibility.Visible : Visibility.Collapsed;
+            TransferRemoveActions.Visibility = (!running && !canRetry)
+                ? Visibility.Visible
+                : Visibility.Collapsed;
+        }
+
+        private void TransferIslandClose_Click(object sender, RoutedEventArgs e)
+        {
+            HideTransferIsland();
+        }
+
+        private void HideTransferIsland()
+        {
+            if (!_transferIslandOpen)
+            {
+                return;
+            }
+
+            _transferIslandOpen = false;
+            int version = ++_transferIslandVersion;
+
+            if (_transferIslandItem != null)
+            {
+                _transferIslandItem.PropertyChanged -= TransferIslandItem_PropertyChanged;
+                _transferIslandItem = null;
+            }
+
+            TransferIsland.IsHitTestVisible = false;
+
+            Storyboard storyboard = new Storyboard();
+            AddOpacityAnimation(storyboard, TransferIsland, TransferIsland.Opacity, 0, 130);
+            AddTranslateYAnimation(storyboard, TransferIsland, 14, 130);
+            storyboard.Completed += (s, e) =>
+            {
+                if (_transferIslandOpen || version != _transferIslandVersion)
+                {
+                    return;
+                }
+
+                TransferIsland.Visibility = Visibility.Collapsed;
+                TransferIsland.IsHitTestVisible = true;
+                UpdateBottomIslandsVisibility();
+            };
+            storyboard.Begin();
+        }
+
+        private void HideTransferIslandImmediate()
+        {
+            _transferIslandOpen = false;
+            _transferIslandVersion++;
+
+            if (_transferIslandItem != null)
+            {
+                _transferIslandItem.PropertyChanged -= TransferIslandItem_PropertyChanged;
+                _transferIslandItem = null;
+            }
+
+            TransferIsland.Visibility = Visibility.Collapsed;
+            TransferIsland.IsHitTestVisible = true;
+            UpdateBottomIslandsVisibility();
+        }
+
+        private void TransferCancelAction_Click(object sender, RoutedEventArgs e)
+        {
+            TransferItem item = _transferIslandItem;
+            HideTransferIsland();
+
+            if (item != null)
+            {
+                CancelTransfer(item);
+            }
+        }
+
+        private void TransferRetryAction_Click(object sender, RoutedEventArgs e)
+        {
+            TransferItem item = _transferIslandItem;
+            HideTransferIslandImmediate();
+
+            if (item != null)
+            {
+                RetryTransfer(item);
+            }
+        }
+
+        private void TransferRemoveAction_Click(object sender, RoutedEventArgs e)
+        {
+            TransferItem item = _transferIslandItem;
+            HideTransferIslandImmediate();
+
+            if (item != null)
+            {
+                RemoveTransfer(item);
+            }
         }
 
         private void RestartDirectoryCollapseTimer()
@@ -1742,14 +2162,13 @@ namespace LumiaYD
         {
             if (args.Files == null || args.Files.Count == 0)
             {
-                ShowInfoDialog("ИНФО", "Файл не выбран.");
                 return;
             }
 
             StartUpload(args.Files[0]);
         }
 
-        private async void StartUpload(StorageFile file)
+        private void StartUpload(StorageFile file)
         {
             var client = _webDav;
             if (client == null || file == null)
@@ -1757,42 +2176,93 @@ namespace LumiaYD
                 return;
             }
 
-            var transfer = CreateTransfer(file.Name, "Загрузка...");
-            transfer.IconPath = "M12 20 L12 8 M12 8 L7 13 M12 8 L17 13";
-            transfer.IconColor = "#F6F6F4";
-            _transfers.Add(transfer);
+            string folderPath = currentPath;
+            TransferItem transfer = CreateTransfer(
+                file.Name,
+                "Загрузка...",
+                TransferKind.Upload,
+                "НА ДИСК · " + (folderPath == "/" ? "корень" : folderPath));
+            transfer.SourceStorageFile = file;
+            transfer.UploadFolderPath = folderPath;
+
+            AddActiveTransfer(transfer);
+            RunUploadAsync(transfer, file);
+        }
+
+        private async void RunUploadAsync(TransferItem transfer, StorageFile file)
+        {
+            var client = _webDav;
+            if (transfer == null || client == null || file == null)
+            {
+                FinishTransfer(transfer, TransferState.Failed, "Нет подключения");
+                return;
+            }
+
+            CancellationToken token = transfer.Cancellation != null
+                ? transfer.Cancellation.Token
+                : CancellationToken.None;
+            string folderPath = string.IsNullOrEmpty(transfer.UploadFolderPath)
+                ? currentPath
+                : transfer.UploadFolderPath;
 
             BeginDownloadActivity();
             App.Log("upload start: " + file.Name);
 
             try
             {
-                await client.UploadFileAsync(currentPath, file, delegate(int percent)
+                await client.UploadFileAsync(folderPath, file, delegate(int percent)
                 {
-                    Deployment.Current.Dispatcher.BeginInvoke(() => { transfer.Progress = percent; });
-                }, CancellationToken.None);
+                    Deployment.Current.Dispatcher.BeginInvoke(() =>
+                    {
+                        if (transfer.IsRunning)
+                        {
+                            transfer.Progress = percent;
+                        }
+                    });
+                }, token);
 
-                transfer.StatusText = "На Диске";
+                token.ThrowIfCancellationRequested();
+
                 transfer.Progress = 100;
                 App.Log("upload done: " + file.Name);
+                FinishTransfer(transfer, TransferState.Completed, "На Диске");
 
-                LoadFolder(currentPath);
-                LoadQuotaAsync();
-                ShowInfoDialog("ГОТОВО", "Файл «" + file.Name + "» загружен на Диск.");
+                if (MainPivot.Visibility == Visibility.Visible && currentPath == folderPath)
+                {
+                    LoadFolder(currentPath);
+                    LoadQuotaAsync();
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                FinishTransfer(transfer, TransferState.Canceled, "Отменено");
             }
             catch (WebDavException ex)
             {
-                transfer.StatusText = "Ошибка";
-                transfer.IconColor = "#E81123";
                 App.Log("upload failed: " + ex.Message);
-                ShowInfoDialog("СБОЙ", "Не удалось загрузить файл:\n" + ex.Message);
+                FinishTransfer(transfer, TransferState.Failed, "Ошибка: " + ex.Message);
+
+                if (IsUnauthorizedError(ex))
+                {
+                    HandleUnauthorized();
+                }
             }
             catch (Exception ex)
             {
-                transfer.StatusText = "Ошибка";
-                transfer.IconColor = "#E81123";
-                App.Log("upload error: " + ex.Message);
-                ShowInfoDialog("СБОЙ", "Ошибка при загрузке файла:\n" + ex.Message);
+                if (token.IsCancellationRequested)
+                {
+                    FinishTransfer(transfer, TransferState.Canceled, "Отменено");
+                }
+                else
+                {
+                    App.Log("upload error: " + ex);
+                    FinishTransfer(transfer, TransferState.Failed, "Ошибка загрузки");
+
+                    if (IsUnauthorizedError(ex))
+                    {
+                        HandleUnauthorized();
+                    }
+                }
             }
             finally
             {
@@ -1852,6 +2322,447 @@ namespace LumiaYD
             ShowNothingDialog(title, message, "ПОНЯТНО", null, null, null, false);
         }
 
+        private static bool IsUnauthorizedError(Exception ex)
+        {
+            var webDavException = ex as WebDavException;
+            if (webDavException != null)
+            {
+                return webDavException.StatusCode == HttpStatusCode.Unauthorized;
+            }
+
+            var webException = ex as WebException;
+            if (webException != null)
+            {
+                var response = webException.Response as HttpWebResponse;
+                if (response != null)
+                {
+                    try
+                    {
+                        return response.StatusCode == HttpStatusCode.Unauthorized;
+                    }
+                    finally
+                    {
+                        response.Dispose();
+                    }
+                }
+            }
+
+            return false;
+        }
+
+        private static string GetTransferGlyph(TransferKind kind)
+        {
+            switch (kind)
+            {
+                case TransferKind.Upload:
+                    return "\uE4C0";
+                case TransferKind.FolderArchive:
+                    return "\uEB2A";
+                case TransferKind.Image:
+                    return "\uEA24";
+                default:
+                    return "\uE20C";
+            }
+        }
+
+        private static TransferItem CreateTransfer(string fileName, string status, TransferKind kind,
+                                                   string targetText)
+        {
+            return new TransferItem
+            {
+                Id = Guid.NewGuid().ToString("N"),
+                FileName = string.IsNullOrEmpty(fileName) ? "файл" : fileName,
+                Progress = 0,
+                StatusText = status,
+                TargetText = targetText ?? "",
+                Kind = kind,
+                CreatedAt = DateTime.Now,
+                IconGlyph = GetTransferGlyph(kind),
+                IconColor = "#F6F6F4",
+                State = TransferState.Running,
+                Cancellation = new CancellationTokenSource()
+            };
+        }
+
+        private void AddActiveTransfer(TransferItem transfer)
+        {
+            if (transfer == null)
+            {
+                return;
+            }
+
+            _activeTransfers.Insert(0, transfer);
+            SaveTransferHistory();
+            UpdateTransfersSections();
+        }
+
+        private void FinishTransfer(TransferItem transfer, TransferState state, string status)
+        {
+            if (transfer == null)
+            {
+                return;
+            }
+
+            transfer.State = state;
+            transfer.StatusText = status;
+            transfer.IconColor = state == TransferState.Failed
+                ? "#D71920"
+                : (state == TransferState.Canceled || state == TransferState.Interrupted
+                    ? "#8A8A8A"
+                    : "#F6F6F4");
+
+            if (state == TransferState.Completed)
+            {
+                transfer.Progress = 100;
+            }
+
+            bool wasActive = _activeTransfers.Remove(transfer);
+            if (wasActive)
+            {
+                _completedTransfers.Insert(0, transfer);
+                while (_completedTransfers.Count > TransferHistoryLimit)
+                {
+                    _completedTransfers.RemoveAt(_completedTransfers.Count - 1);
+                }
+            }
+
+            if (transfer.Cancellation != null)
+            {
+                try
+                {
+                    transfer.Cancellation.Dispose();
+                }
+                catch
+                {
+                }
+
+                transfer.Cancellation = null;
+            }
+
+            SaveTransferHistory();
+            UpdateTransfersSections();
+        }
+
+        private void CancelTransfer(TransferItem transfer)
+        {
+            if (transfer == null || !transfer.IsRunning)
+            {
+                return;
+            }
+
+            transfer.StatusText = "Остановка...";
+
+            if (transfer.Cancellation == null)
+            {
+                FinishTransfer(transfer, TransferState.Canceled, "Отменено");
+                return;
+            }
+
+            try
+            {
+                transfer.Cancellation.Cancel();
+            }
+            catch
+            {
+                FinishTransfer(transfer, TransferState.Canceled, "Отменено");
+            }
+        }
+
+        private void RetryTransfer(TransferItem transfer)
+        {
+            if (transfer == null || !transfer.CanRetry)
+            {
+                return;
+            }
+
+            _completedTransfers.Remove(transfer);
+
+            if (transfer.Cancellation != null)
+            {
+                try
+                {
+                    transfer.Cancellation.Dispose();
+                }
+                catch
+                {
+                }
+            }
+
+            transfer.Cancellation = new CancellationTokenSource();
+            transfer.State = TransferState.Running;
+            transfer.Progress = 0;
+            transfer.IconColor = "#F6F6F4";
+
+            switch (transfer.Kind)
+            {
+                case TransferKind.Upload:
+                    transfer.StatusText = "Загрузка...";
+                    break;
+                case TransferKind.FolderArchive:
+                    transfer.StatusText = "Подготовка архива...";
+                    break;
+                default:
+                    transfer.StatusText = "Скачивание...";
+                    break;
+            }
+
+            _activeTransfers.Insert(0, transfer);
+            SaveTransferHistory();
+            UpdateTransfersSections();
+
+            switch (transfer.Kind)
+            {
+                case TransferKind.Upload:
+                    RunUploadAsync(transfer, transfer.SourceStorageFile);
+                    break;
+                case TransferKind.FolderArchive:
+                    StartFolderDownloadToStorageFile(transfer.SourceFile, transfer.TargetFile, transfer);
+                    break;
+                case TransferKind.Image:
+                    RunImageDownloadAsync(transfer, transfer.SourceFile);
+                    break;
+                default:
+                    StartDownloadToStorageFile(transfer.SourceFile, transfer.TargetFile, transfer);
+                    break;
+            }
+        }
+
+        private void RemoveTransfer(TransferItem transfer)
+        {
+            if (transfer == null || transfer.IsRunning)
+            {
+                return;
+            }
+
+            _completedTransfers.Remove(transfer);
+            SaveTransferHistory();
+            UpdateTransfersSections();
+        }
+
+        private void ClearCompletedTransfers_Click(object sender, RoutedEventArgs e)
+        {
+            if (_completedTransfers.Count == 0)
+            {
+                return;
+            }
+
+            ShowNothingDialog(
+                "ОЧИСТИТЬ ИСТОРИЮ?",
+                "Записи о завершённых передачах будут удалены. Сами файлы останутся на месте.",
+                "ОЧИСТИТЬ",
+                delegate { ClearCompletedTransfers(); },
+                "ОТМЕНА",
+                null,
+                true);
+        }
+
+        private void ClearCompletedTransfers()
+        {
+            if (_transferIslandItem != null && _completedTransfers.Contains(_transferIslandItem))
+            {
+                HideTransferIslandImmediate();
+            }
+
+            _completedTransfers.Clear();
+            SaveTransferHistory();
+            UpdateTransfersSections();
+        }
+
+        private void CancelAndClearActiveTransfers()
+        {
+            for (int i = 0; i < _activeTransfers.Count; i++)
+            {
+                TransferItem transfer = _activeTransfers[i];
+                transfer.State = TransferState.Canceled;
+                transfer.StatusText = "Отменено";
+                transfer.IconColor = "#8A8A8A";
+
+                if (transfer.Cancellation != null)
+                {
+                    try
+                    {
+                        transfer.Cancellation.Cancel();
+                    }
+                    catch
+                    {
+                    }
+                }
+            }
+
+            _activeTransfers.Clear();
+            SaveTransferHistory();
+            UpdateTransfersSections();
+        }
+
+        private void ClearAllTransfers(bool clearHistory)
+        {
+            CancelAndClearActiveTransfers();
+            _completedTransfers.Clear();
+
+            if (clearHistory)
+            {
+                var settings = IsolatedStorageSettings.ApplicationSettings;
+                settings.Remove(TransferHistoryKey);
+                settings.Save();
+            }
+            else
+            {
+                SaveTransferHistory();
+            }
+
+            UpdateTransfersSections();
+        }
+
+        private void SaveTransferHistory()
+        {
+            var settings = IsolatedStorageSettings.ApplicationSettings;
+            StringBuilder builder = new StringBuilder();
+            int count = 0;
+
+            AppendTransferHistory(builder, _activeTransfers, ref count);
+            AppendTransferHistory(builder, _completedTransfers, ref count);
+
+            if (builder.Length == 0)
+            {
+                settings.Remove(TransferHistoryKey);
+            }
+            else
+            {
+                settings[TransferHistoryKey] = builder.ToString();
+            }
+
+            settings.Save();
+        }
+
+        private static void AppendTransferHistory(StringBuilder builder, IEnumerable<TransferItem> transfers,
+                                                   ref int count)
+        {
+            foreach (TransferItem transfer in transfers)
+            {
+                if (count >= TransferHistoryLimit)
+                {
+                    return;
+                }
+
+                if (builder.Length > 0)
+                {
+                    builder.Append('\n');
+                }
+
+                builder.Append(Uri.EscapeDataString(transfer.Id ?? ""));
+                builder.Append('\t').Append((int)transfer.Kind);
+                builder.Append('\t').Append((int)transfer.State);
+                builder.Append('\t').Append(Uri.EscapeDataString(transfer.FileName ?? ""));
+                builder.Append('\t').Append(Uri.EscapeDataString(transfer.StatusText ?? ""));
+                builder.Append('\t').Append(Uri.EscapeDataString(transfer.TargetText ?? ""));
+                builder.Append('\t').Append(transfer.Progress.ToString(CultureInfo.InvariantCulture));
+                builder.Append('\t').Append(transfer.CreatedAt.Ticks.ToString(CultureInfo.InvariantCulture));
+                builder.Append('\t').Append(Uri.EscapeDataString(transfer.IconGlyph ?? ""));
+                builder.Append('\t').Append(Uri.EscapeDataString(transfer.IconColor ?? ""));
+                count++;
+            }
+        }
+
+        private void LoadTransferHistory()
+        {
+            var settings = IsolatedStorageSettings.ApplicationSettings;
+            string raw = settings.Contains(TransferHistoryKey) ? settings[TransferHistoryKey] as string : null;
+            if (string.IsNullOrEmpty(raw))
+            {
+                return;
+            }
+
+            bool changed = false;
+            string[] lines = raw.Split(new[] { '\n' }, StringSplitOptions.RemoveEmptyEntries);
+
+            foreach (string line in lines)
+            {
+                string[] parts = line.Split('\t');
+                if (parts.Length < 9)
+                {
+                    continue;
+                }
+
+                int kindValue;
+                int stateValue;
+                if (!int.TryParse(parts[1], out kindValue) || !int.TryParse(parts[2], out stateValue))
+                {
+                    continue;
+                }
+
+                TransferItem transfer = new TransferItem();
+                transfer.Id = SafeUnescape(parts[0]);
+                transfer.Kind = (TransferKind)kindValue;
+                transfer.FileName = SafeUnescape(parts[3]);
+                transfer.StatusText = SafeUnescape(parts[4]);
+                transfer.TargetText = SafeUnescape(parts[5]);
+
+                double progress;
+                if (double.TryParse(parts[6], NumberStyles.Float, CultureInfo.InvariantCulture, out progress))
+                {
+                    transfer.Progress = progress;
+                }
+
+                long ticks;
+                if (long.TryParse(parts[7], NumberStyles.Integer, CultureInfo.InvariantCulture, out ticks) &&
+                    ticks > 0 && ticks <= DateTime.MaxValue.Ticks)
+                {
+                    transfer.CreatedAt = new DateTime(ticks);
+                }
+                else
+                {
+                    transfer.CreatedAt = DateTime.Now;
+                }
+
+                transfer.IconGlyph = parts.Length > 8
+                    ? SafeUnescape(parts[8])
+                    : GetTransferGlyph(transfer.Kind);
+                transfer.IconColor = parts.Length > 9
+                    ? SafeUnescape(parts[9])
+                    : "#F6F6F4";
+
+                TransferState state = (TransferState)stateValue;
+                if (state == TransferState.Running)
+                {
+                    state = TransferState.Interrupted;
+                    transfer.StatusText = "Прервано при закрытии";
+                    transfer.IconColor = "#8A8A8A";
+                    changed = true;
+                }
+
+                transfer.State = state;
+                transfer.Cancellation = null;
+                _completedTransfers.Add(transfer);
+            }
+
+            while (_completedTransfers.Count > TransferHistoryLimit)
+            {
+                _completedTransfers.RemoveAt(_completedTransfers.Count - 1);
+            }
+
+            if (changed)
+            {
+                SaveTransferHistory();
+            }
+        }
+
+        private static string SafeUnescape(string value)
+        {
+            if (string.IsNullOrEmpty(value))
+            {
+                return "";
+            }
+
+            try
+            {
+                return Uri.UnescapeDataString(value);
+            }
+            catch
+            {
+                return value;
+            }
+        }
+
         private void DownloadFile(YandexFileItem file)
         {
             string safeName = SanitizeFileName(file.Name);
@@ -1892,74 +2803,106 @@ namespace LumiaYD
             }
         }
 
-        private static TransferItem CreateTransfer(string fileName, string status)
+        private void DownloadImageToGallery(YandexFileItem file)
         {
-            return new TransferItem
-            {
-                FileName = fileName,
-                Progress = 0,
-                StatusText = status,
-                ProgressText = "0%",
-                IconPath = "M12 4 L12 16 M12 16 L7 11 M12 16 L17 11",
-                IconColor = "#0078D7"
-            };
+            TransferItem transfer = CreateTransfer(file.Name, "Скачивание...", TransferKind.Image, "В ГАЛЕРЕЮ");
+            transfer.SourceFile = file;
+
+            AddActiveTransfer(transfer);
+            RunImageDownloadAsync(transfer, file);
         }
 
-        private async void DownloadImageToGallery(YandexFileItem file)
+        private async void RunImageDownloadAsync(TransferItem transfer, YandexFileItem file)
         {
-            var transfer = CreateTransfer(file.Name, "Скачивание...");
-            _transfers.Add(transfer);
-
-            StorageFile tempFile = null;
-            string safeName = SanitizeFileName(file.Name);
             var client = _webDav;
-
-            if (client == null)
+            if (transfer == null || client == null || file == null)
             {
-                transfer.StatusText = "Ошибка авторизации";
-                transfer.IconColor = "#E81123";
+                FinishTransfer(transfer, TransferState.Failed, "Нет подключения");
                 return;
             }
+
+            CancellationToken token = transfer.Cancellation != null
+                ? transfer.Cancellation.Token
+                : CancellationToken.None;
+            string safeName = SanitizeFileName(file.Name);
+            StorageFile tempFile = null;
+
+            BeginDownloadActivity();
+            App.Log("image download start: " + file.Name);
 
             try
             {
                 tempFile = await ApplicationData.Current.TemporaryFolder.CreateFileAsync(
                     safeName, CreationCollisionOption.GenerateUniqueName);
+                token.ThrowIfCancellationRequested();
 
                 var request = client.CreateDownloadRequest(file.Href);
 
-                var response = await Task.Factory.FromAsync<WebResponse>(
-                    request.BeginGetResponse, request.EndGetResponse, null);
-
-                using (var httpResponse = (HttpWebResponse)response)
-                using (Stream responseStream = httpResponse.GetResponseStream())
-                using (var fileStream = await tempFile.OpenStreamForWriteAsync())
+                using (token.Register(delegate
                 {
-                    long totalBytes = httpResponse.ContentLength;
-                    long bytesRead = 0;
-                    int lastProgress = -1;
-                    byte[] buffer = new byte[16384];
-                    int read;
-
-                    while ((read = await responseStream.ReadAsync(buffer, 0, buffer.Length)) > 0)
+                    try
                     {
-                        await fileStream.WriteAsync(buffer, 0, read);
-                        bytesRead += read;
+                        request.Abort();
+                    }
+                    catch
+                    {
+                    }
+                }))
+                {
+                    try
+                    {
+                        var response = await Task.Factory.FromAsync<WebResponse>(
+                            request.BeginGetResponse, request.EndGetResponse, null);
 
-                        if (totalBytes > 0)
+                        using (var httpResponse = (HttpWebResponse)response)
+                        using (Stream responseStream = httpResponse.GetResponseStream())
+                        using (var fileStream = await tempFile.OpenStreamForWriteAsync())
                         {
-                            int progress = (int)((bytesRead * 100) / totalBytes);
-                            if (progress != lastProgress)
+                            long totalBytes = httpResponse.ContentLength;
+                            long bytesRead = 0;
+                            int lastProgress = -1;
+                            byte[] buffer = new byte[16384];
+                            int read;
+
+                            while ((read = await responseStream.ReadAsync(buffer, 0, buffer.Length)) > 0)
                             {
-                                lastProgress = progress;
-                                int capturedProgress = progress;
-                                Deployment.Current.Dispatcher.BeginInvoke(() => transfer.Progress = capturedProgress);
+                                token.ThrowIfCancellationRequested();
+                                await fileStream.WriteAsync(buffer, 0, read);
+                                bytesRead += read;
+
+                                if (totalBytes > 0)
+                                {
+                                    int progress = (int)((bytesRead * 100) / totalBytes);
+                                    if (progress != lastProgress)
+                                    {
+                                        lastProgress = progress;
+                                        int capturedProgress = progress;
+                                        Deployment.Current.Dispatcher.BeginInvoke(() =>
+                                        {
+                                            if (transfer.IsRunning)
+                                            {
+                                                transfer.Progress = capturedProgress;
+                                            }
+                                        });
+                                    }
+                                }
                             }
+
+                            await fileStream.FlushAsync();
                         }
                     }
+                    catch (WebException)
+                    {
+                        if (token.IsCancellationRequested)
+                        {
+                            throw new OperationCanceledException(token);
+                        }
 
-                    await fileStream.FlushAsync();
+                        throw;
+                    }
                 }
+
+                token.ThrowIfCancellationRequested();
 
                 using (var readStream = await tempFile.OpenStreamForReadAsync())
                 using (var mediaLibrary = new MediaLibrary())
@@ -1967,15 +2910,29 @@ namespace LumiaYD
                     mediaLibrary.SavePicture(safeName, readStream);
                 }
 
-                transfer.StatusText = "В галерее";
-                transfer.Progress = 100;
-                ShowInfoDialog("ГОТОВО", "Картинка сохранена в галерею!\nЧерез USB: Phone\\Pictures");
+                App.Log("image download done: " + file.Name);
+                FinishTransfer(transfer, TransferState.Completed, "В Галерее");
+            }
+            catch (OperationCanceledException)
+            {
+                FinishTransfer(transfer, TransferState.Canceled, "Отменено");
             }
             catch (Exception ex)
             {
-                transfer.StatusText = "Ошибка";
-                transfer.IconColor = "#E81123";
-                ShowInfoDialog("СБОЙ", "Ошибка при скачивании картинки:\n" + ex.Message);
+                if (token.IsCancellationRequested)
+                {
+                    FinishTransfer(transfer, TransferState.Canceled, "Отменено");
+                }
+                else
+                {
+                    App.Log("image download failed: " + file.Name + ": " + ex);
+                    FinishTransfer(transfer, TransferState.Failed, "Ошибка скачивания");
+
+                    if (IsUnauthorizedError(ex))
+                    {
+                        HandleUnauthorized();
+                    }
+                }
             }
             finally
             {
@@ -1985,6 +2942,8 @@ namespace LumiaYD
                     // в C# 5 (VS2013) нельзя использовать await в finally.
                     DeleteTempFile(tempFile);
                 }
+
+                EndDownloadActivity();
             }
         }
 
@@ -2015,10 +2974,18 @@ namespace LumiaYD
                 string transferName = fileToDownload.IsFolder
                     ? fileToDownload.Name + ".zip"
                     : fileToDownload.Name;
-                var transfer = CreateTransfer(
+                TransferKind kind = fileToDownload.IsFolder
+                    ? TransferKind.FolderArchive
+                    : TransferKind.Download;
+                TransferItem transfer = CreateTransfer(
                     transferName,
-                    fileToDownload.IsFolder ? "Подготовка архива..." : "Скачивание...");
-                _transfers.Add(transfer);
+                    fileToDownload.IsFolder ? "Подготовка архива..." : "Скачивание...",
+                    kind,
+                    fileToDownload.IsFolder ? "ZIP · НА ТЕЛЕФОН" : "НА ТЕЛЕФОН");
+                transfer.SourceFile = fileToDownload;
+                transfer.TargetFile = args.File;
+
+                AddActiveTransfer(transfer);
 
                 if (fileToDownload.IsFolder)
                 {
@@ -2033,7 +3000,6 @@ namespace LumiaYD
             {
                 _pendingDownloadFile = null;
                 ClearPendingDownload();
-                ShowInfoDialog("ИНФО", "Скачивание отменено");
             }
         }
 
@@ -2041,12 +3007,15 @@ namespace LumiaYD
                                                           TransferItem transfer)
         {
             var client = _webDav;
-            if (client == null || folder == null || targetFile == null)
+            if (transfer == null || client == null || folder == null || targetFile == null)
             {
-                transfer.StatusText = "Ошибка авторизации";
-                transfer.IconColor = "#E81123";
+                FinishTransfer(transfer, TransferState.Failed, "Нет подключения");
                 return;
             }
+
+            CancellationToken token = transfer.Cancellation != null
+                ? transfer.Cancellation.Token
+                : CancellationToken.None;
 
             BeginDownloadActivity();
             App.Log("folder download start: " + folder.Name);
@@ -2054,7 +3023,8 @@ namespace LumiaYD
             try
             {
                 transfer.StatusText = "Подготовка архива...";
-                List<FolderZipEntry> entries = await CollectFolderZipEntriesAsync(client, folder, transfer);
+                List<FolderZipEntry> entries = await CollectFolderZipEntriesAsync(client, folder, transfer, token);
+                token.ThrowIfCancellationRequested();
 
                 int totalFiles = 0;
                 foreach (FolderZipEntry entry in entries)
@@ -2086,6 +3056,8 @@ namespace LumiaYD
 
                         foreach (FolderZipEntry entry in entries)
                         {
+                            token.ThrowIfCancellationRequested();
+
                             if (entry.IsDirectory)
                             {
                                 zip.AddDirectory(entry.EntryPath);
@@ -2096,17 +3068,42 @@ namespace LumiaYD
 
                             HttpWebRequest request = client.CreateDownloadRequest(entry.Item.Href);
 
-                            using (WebResponse response = await Task.Factory.FromAsync<WebResponse>(
-                                request.BeginGetResponse, request.EndGetResponse, null))
-                            using (Stream responseStream = response.GetResponseStream())
-                            using (Stream entryStream = zip.BeginEntry(entry.EntryPath))
+                            using (token.Register(delegate
                             {
-                                byte[] buffer = new byte[65536];
-                                int read;
-
-                                while ((read = await responseStream.ReadAsync(buffer, 0, buffer.Length)) > 0)
+                                try
                                 {
-                                    entryStream.Write(buffer, 0, read);
+                                    request.Abort();
+                                }
+                                catch
+                                {
+                                }
+                            }))
+                            {
+                                try
+                                {
+                                    using (WebResponse response = await Task.Factory.FromAsync<WebResponse>(
+                                        request.BeginGetResponse, request.EndGetResponse, null))
+                                    using (Stream responseStream = response.GetResponseStream())
+                                    using (Stream entryStream = zip.BeginEntry(entry.EntryPath))
+                                    {
+                                        byte[] buffer = new byte[65536];
+                                        int read;
+
+                                        while ((read = await responseStream.ReadAsync(buffer, 0, buffer.Length)) > 0)
+                                        {
+                                            token.ThrowIfCancellationRequested();
+                                            entryStream.Write(buffer, 0, read);
+                                        }
+                                    }
+                                }
+                                catch (WebException)
+                                {
+                                    if (token.IsCancellationRequested)
+                                    {
+                                        throw new OperationCanceledException(token);
+                                    }
+
+                                    throw;
                                 }
                             }
 
@@ -2124,18 +3121,31 @@ namespace LumiaYD
                     await output.FlushAsync();
                 }
 
-                transfer.StatusText = "Архив готов";
-                transfer.Progress = 100;
+                token.ThrowIfCancellationRequested();
+
                 App.Log("folder download done: " + folder.Name + ", files=" + totalFiles);
-                ShowInfoDialog("ГОТОВО", "Папка «" + folder.Name + "» сохранена в ZIP-архив.\nФайлов: " + totalFiles + ".");
+                FinishTransfer(transfer, TransferState.Completed, "Архив готов");
+            }
+            catch (OperationCanceledException)
+            {
+                FinishTransfer(transfer, TransferState.Canceled, "Отменено");
             }
             catch (Exception ex)
             {
-                transfer.StatusText = "Ошибка";
-                transfer.IconColor = "#E81123";
-                App.Log("folder download failed: " + folder.Name + ": " + ex);
-                ShowInfoDialog("СБОЙ", "Не удалось скачать папку целиком:\n" + ex.Message +
-                                        "\n\nАрхив может быть неполным.");
+                if (token.IsCancellationRequested)
+                {
+                    FinishTransfer(transfer, TransferState.Canceled, "Отменено");
+                }
+                else
+                {
+                    App.Log("folder download failed: " + folder.Name + ": " + ex);
+                    FinishTransfer(transfer, TransferState.Failed, "Ошибка архива");
+
+                    if (IsUnauthorizedError(ex))
+                    {
+                        HandleUnauthorized();
+                    }
+                }
             }
             finally
             {
@@ -2145,7 +3155,8 @@ namespace LumiaYD
 
         private async Task<List<FolderZipEntry>> CollectFolderZipEntriesAsync(YandexWebDavClient client,
                                                                               YandexFileItem folder,
-                                                                              TransferItem transfer)
+                                                                              TransferItem transfer,
+                                                                              CancellationToken token)
         {
             var result = new List<FolderZipEntry>();
             var queue = new Queue<KeyValuePair<string, string>>();
@@ -2164,8 +3175,10 @@ namespace LumiaYD
 
             while (queue.Count > 0)
             {
+                token.ThrowIfCancellationRequested();
+
                 KeyValuePair<string, string> current = queue.Dequeue();
-                List<YandexFileItem> items = await client.GetFolderAsync(current.Key, CancellationToken.None);
+                List<YandexFileItem> items = await client.GetFolderAsync(current.Key, token);
 
                 foldersScanned++;
                 transfer.StatusText = "Подготовка: папок " + foldersScanned;
@@ -2248,17 +3261,21 @@ namespace LumiaYD
         private async void StartDownloadToStorageFile(YandexFileItem file, StorageFile targetFile, TransferItem transfer)
         {
             var client = _webDav;
-            if (client == null)
+            if (transfer == null || client == null || file == null || targetFile == null)
             {
-                transfer.StatusText = "Ошибка авторизации";
-                transfer.IconColor = "#E81123";
+                FinishTransfer(transfer, TransferState.Failed, "Нет подключения");
                 return;
             }
+
+            CancellationToken token = transfer.Cancellation != null
+                ? transfer.Cancellation.Token
+                : CancellationToken.None;
 
             long totalBytes = -1;
             long downloadedBytes = 0;
             int lastProgress = -1;
             bool isCompleted = false;
+            bool authExpired = false;
             Exception lastError = null;
 
             BeginDownloadActivity();
@@ -2268,7 +3285,9 @@ namespace LumiaYD
             {
                 try
                 {
-                    totalBytes = await GetRemoteFileSizeAsync(client, file.Href);
+                    totalBytes = await GetRemoteFileSizeAsync(client, file.Href, token);
+                    token.ThrowIfCancellationRequested();
+
                     if (totalBytes > 0)
                     {
                         App.Log("download size: " + totalBytes);
@@ -2278,11 +3297,17 @@ namespace LumiaYD
                         isCompleted = true;
                     }
                 }
+                catch (OperationCanceledException)
+                {
+                    throw;
+                }
                 catch (Exception ex)
                 {
                     // HEAD может быть запрещён — размер возьмём из первого 206-ответа.
                     App.Log("download HEAD failed: " + ex.Message);
                 }
+
+                token.ThrowIfCancellationRequested();
 
                 using (var fileStream = await targetFile.OpenStreamForWriteAsync())
                 {
@@ -2292,12 +3317,16 @@ namespace LumiaYD
 
                 while (!isCompleted)
                 {
+                    token.ThrowIfCancellationRequested();
+
                     bool chunkDone = false;
                     Exception chunkError = null;
                     bool stopRetry = false;
 
                     for (int attempt = 1; attempt <= DownloadMaxAttempts && !chunkDone && !stopRetry; attempt++)
                     {
+                        token.ThrowIfCancellationRequested();
+
                         HttpWebResponse response = null;
 
                         try
@@ -2314,104 +3343,135 @@ namespace LumiaYD
 
                             HttpWebRequest request = client.CreateDownloadRequest(file.Href);
 
-                            if (!TrySetRangeHeader(request, chunkStart, chunkEnd))
+                            using (token.Register(delegate
                             {
-                                stopRetry = true;
-                                throw new NotSupportedException(
-                                    "Этот телефон не позволяет скачивать файл по частям.");
-                            }
-
-                            response = (HttpWebResponse)await Task.Factory.FromAsync<WebResponse>(
-                                request.BeginGetResponse, request.EndGetResponse, null);
-
-                            int status = (int)response.StatusCode;
-
-                            if (status == 401 || status == 403)
-                            {
-                                stopRetry = true;
-                                throw new IOException(status == 401
-                                    ? "Пароль не подошёл или сессия истекла."
-                                    : "Нет прав на скачивание файла.");
-                            }
-
-                            if (status == 206)
-                            {
-                                if (totalBytes <= 0)
+                                try
                                 {
-                                    totalBytes = ParseTotalBytes(response.Headers["Content-Range"]);
+                                    request.Abort();
                                 }
-                            }
-                            else if (status == 200)
-                            {
-                                // Сервер проигнорировал Range. Для маленького файла
-                                // это допустимо, для большого — нет.
-                                if (chunkStart == 0 && response.ContentLength > 0 &&
-                                    response.ContentLength <= DownloadChunkSize * 2)
+                                catch
                                 {
-                                    totalBytes = response.ContentLength;
                                 }
-                                else
+                            }))
+                            {
+                                if (!TrySetRangeHeader(request, chunkStart, chunkEnd))
                                 {
                                     stopRetry = true;
                                     throw new NotSupportedException(
-                                        "Сервер не поддерживает докачку, а файл слишком большой для одного запроса.");
+                                        "Этот телефон не позволяет скачивать файл по частям.");
                                 }
-                            }
-                            else if (status == 416)
-                            {
-                                // 416 после уже скачанных байт означает, что файл кончился.
-                                if (downloadedBytes > 0 && (totalBytes <= 0 || downloadedBytes >= totalBytes))
+
+                                response = (HttpWebResponse)await Task.Factory.FromAsync<WebResponse>(
+                                    request.BeginGetResponse, request.EndGetResponse, null);
+
+                                token.ThrowIfCancellationRequested();
+
+                                int status = (int)response.StatusCode;
+
+                                if (status == 401 || status == 403)
                                 {
-                                    isCompleted = true;
-                                    chunkDone = true;
-                                    break;
+                                    stopRetry = true;
+
+                                    if (status == 401)
+                                    {
+                                        authExpired = true;
+                                    }
+
+                                    throw new IOException(status == 401
+                                        ? "Пароль не подошёл или сессия истекла."
+                                        : "Нет прав на скачивание файла.");
                                 }
 
-                                stopRetry = true;
-                                throw new IOException("Сервер отклонил диапазон докачки.");
-                            }
-                            else
-                            {
-                                throw new IOException("HTTP " + status);
-                            }
-
-                            long expectedBytes = response.ContentLength;
-                            long chunkRead = 0;
-
-                            using (Stream responseStream = response.GetResponseStream())
-                            using (var fileStream = await targetFile.OpenStreamForWriteAsync())
-                            {
-                                fileStream.Seek(downloadedBytes, SeekOrigin.Begin);
-
-                                byte[] buffer = new byte[65536];
-                                int read;
-
-                                while ((read = await responseStream.ReadAsync(buffer, 0, buffer.Length)) > 0)
+                                if (status == 206)
                                 {
-                                    await fileStream.WriteAsync(buffer, 0, read);
-                                    downloadedBytes += read;
-                                    chunkRead += read;
+                                    if (totalBytes <= 0)
+                                    {
+                                        totalBytes = ParseTotalBytes(response.Headers["Content-Range"]);
+                                    }
+                                }
+                                else if (status == 200)
+                                {
+                                    // Сервер проигнорировал Range. Для маленького файла
+                                    // это допустимо, для большого — нет.
+                                    if (chunkStart == 0 && response.ContentLength > 0 &&
+                                        response.ContentLength <= DownloadChunkSize * 2)
+                                    {
+                                        totalBytes = response.ContentLength;
+                                    }
+                                    else
+                                    {
+                                        stopRetry = true;
+                                        throw new NotSupportedException(
+                                            "Сервер не поддерживает докачку, а файл слишком большой для одного запроса.");
+                                    }
+                                }
+                                else if (status == 416)
+                                {
+                                    // 416 после уже скачанных байт означает, что файл кончился.
+                                    if (downloadedBytes > 0 && (totalBytes <= 0 || downloadedBytes >= totalBytes))
+                                    {
+                                        isCompleted = true;
+                                        chunkDone = true;
+                                        break;
+                                    }
 
-                                    ReportDownloadProgress(transfer, downloadedBytes, totalBytes, ref lastProgress);
+                                    stopRetry = true;
+                                    throw new IOException("Сервер отклонил диапазон докачки.");
+                                }
+                                else
+                                {
+                                    throw new IOException("HTTP " + status);
                                 }
 
-                                await fileStream.FlushAsync();
-                            }
+                                long expectedBytes = response.ContentLength;
+                                long chunkRead = 0;
 
-                            if (expectedBytes > 0 && chunkRead < expectedBytes)
-                            {
-                                throw new IOException("Пришла только часть данных.");
-                            }
+                                using (Stream responseStream = response.GetResponseStream())
+                                using (var fileStream = await targetFile.OpenStreamForWriteAsync())
+                                {
+                                    fileStream.Seek(downloadedBytes, SeekOrigin.Begin);
 
-                            if (chunkRead == 0)
-                            {
-                                throw new IOException("Сервер вернул пустой ответ.");
-                            }
+                                    byte[] buffer = new byte[65536];
+                                    int read;
 
-                            chunkDone = true;
+                                    while ((read = await responseStream.ReadAsync(buffer, 0, buffer.Length)) > 0)
+                                    {
+                                        token.ThrowIfCancellationRequested();
+
+                                        await fileStream.WriteAsync(buffer, 0, read);
+                                        downloadedBytes += read;
+                                        chunkRead += read;
+
+                                        ReportDownloadProgress(transfer, downloadedBytes, totalBytes, ref lastProgress);
+                                    }
+
+                                    await fileStream.FlushAsync();
+                                }
+
+                                if (expectedBytes > 0 && chunkRead < expectedBytes)
+                                {
+                                    throw new IOException("Пришла только часть данных.");
+                                }
+
+                                if (chunkRead == 0)
+                                {
+                                    throw new IOException("Сервер вернул пустой ответ.");
+                                }
+
+                                chunkDone = true;
+                            }
+                        }
+                        catch (OperationCanceledException)
+                        {
+                            throw;
                         }
                         catch (WebException ex)
                         {
+                            if (token.IsCancellationRequested)
+                            {
+                                throw new OperationCanceledException(token);
+                            }
+
                             chunkError = ex;
 
                             var errorResponse = ex.Response as HttpWebResponse;
@@ -2423,11 +3483,21 @@ namespace LumiaYD
                                 if (errorStatus == 401 || errorStatus == 403)
                                 {
                                     stopRetry = true;
+
+                                    if (errorStatus == 401)
+                                    {
+                                        authExpired = true;
+                                    }
                                 }
                             }
                         }
                         catch (Exception ex)
                         {
+                            if (token.IsCancellationRequested)
+                            {
+                                throw new OperationCanceledException(token);
+                            }
+
                             chunkError = ex;
                         }
                         finally
@@ -2444,6 +3514,7 @@ namespace LumiaYD
                             App.Log("download retry " + file.Name + " at " + downloadedBytes +
                                 ": " + (chunkError != null ? chunkError.Message : "?"));
                             await Task.Delay(2000);
+                            token.ThrowIfCancellationRequested();
                         }
                     }
 
@@ -2467,29 +3538,45 @@ namespace LumiaYD
                     }
                 }
 
+                token.ThrowIfCancellationRequested();
+
                 if (isCompleted)
                 {
-                    transfer.StatusText = "Готово";
-                    transfer.Progress = 100;
                     App.Log("download done: " + file.Name + " (" + downloadedBytes + " bytes)");
-                    ShowInfoDialog("ГОТОВО", "Файл сохранён в выбранную папку!\nТеперь он виден через USB.");
+                    FinishTransfer(transfer, TransferState.Completed, "На телефоне");
                 }
                 else
                 {
-                    transfer.StatusText = "Ошибка сети";
-                    transfer.IconColor = "#E81123";
                     App.Log("download failed: " + file.Name + " at " + downloadedBytes + " / " + totalBytes +
                         ": " + (lastError != null ? lastError.Message : "?"));
-                    ShowInfoDialog("СБОЙ", "Не удалось скачать файл полностью.\nПоследняя ошибка: " +
-                        (lastError != null ? lastError.Message : "Неизвестно"));
+                    FinishTransfer(transfer, TransferState.Failed, "Ошибка сети");
+
+                    if (authExpired)
+                    {
+                        HandleUnauthorized();
+                    }
                 }
+            }
+            catch (OperationCanceledException)
+            {
+                FinishTransfer(transfer, TransferState.Canceled, "Отменено");
             }
             catch (Exception ex)
             {
-                transfer.StatusText = "Ошибка";
-                transfer.IconColor = "#E81123";
-                App.Log("download exception: " + ex);
-                ShowInfoDialog("СБОЙ", "Не удалось скачать файл:\n" + ex.Message);
+                if (token.IsCancellationRequested)
+                {
+                    FinishTransfer(transfer, TransferState.Canceled, "Отменено");
+                }
+                else
+                {
+                    App.Log("download exception: " + ex);
+                    FinishTransfer(transfer, TransferState.Failed, "Ошибка скачивания");
+
+                    if (authExpired || IsUnauthorizedError(ex))
+                    {
+                        HandleUnauthorized();
+                    }
+                }
             }
             finally
             {
@@ -2497,15 +3584,42 @@ namespace LumiaYD
             }
         }
 
-        private static async Task<long> GetRemoteFileSizeAsync(YandexWebDavClient client, string href)
+        private static async Task<long> GetRemoteFileSizeAsync(YandexWebDavClient client, string href,
+                                                               CancellationToken token)
         {
+            token.ThrowIfCancellationRequested();
+
             HttpWebRequest request = client.CreateDownloadRequest(href);
             request.Method = "HEAD";
 
-            using (WebResponse response = await Task.Factory.FromAsync<WebResponse>(
-                request.BeginGetResponse, request.EndGetResponse, null))
+            using (token.Register(delegate
             {
-                return response.ContentLength;
+                try
+                {
+                    request.Abort();
+                }
+                catch
+                {
+                }
+            }))
+            {
+                try
+                {
+                    using (WebResponse response = await Task.Factory.FromAsync<WebResponse>(
+                        request.BeginGetResponse, request.EndGetResponse, null))
+                    {
+                        return response.ContentLength;
+                    }
+                }
+                catch (WebException)
+                {
+                    if (token.IsCancellationRequested)
+                    {
+                        throw new OperationCanceledException(token);
+                    }
+
+                    throw;
+                }
             }
         }
 
@@ -2546,7 +3660,13 @@ namespace LumiaYD
 
             lastProgress = progress;
             int capturedProgress = progress;
-            Deployment.Current.Dispatcher.BeginInvoke(() => transfer.Progress = capturedProgress);
+            Deployment.Current.Dispatcher.BeginInvoke(() =>
+            {
+                if (transfer.IsRunning)
+                {
+                    transfer.Progress = capturedProgress;
+                }
+            });
 
             if (progress % 10 == 0)
             {
@@ -2655,27 +3775,184 @@ namespace LumiaYD
         }
     }
 
+    public enum TransferKind
+    {
+        Download = 0,
+        Upload = 1,
+        FolderArchive = 2,
+        Image = 3
+    }
+
+    public enum TransferState
+    {
+        Running = 0,
+        Completed = 1,
+        Failed = 2,
+        Canceled = 3,
+        Interrupted = 4
+    }
+
     public class TransferItem : INotifyPropertyChanged
     {
         private double _progress;
         private string _statusText;
-        private string _progressText;
+        private string _progressText = "0%";
+        private string _iconGlyph;
+        private string _iconColor = "#F6F6F4";
+        private Brush _iconBrush = new SolidColorBrush(Color.FromArgb(0xFF, 0xF6, 0xF6, 0xF4));
+        private string _targetText = "";
+        private TransferState _state = TransferState.Running;
 
+        public string Id { get; set; }
         public string FileName { get; set; }
-        public string IconPath { get; set; }
-        public string IconColor { get; set; }
+        public TransferKind Kind { get; set; }
+        public DateTime CreatedAt { get; set; }
+
+        public YandexFileItem SourceFile { get; set; }
+        public StorageFile SourceStorageFile { get; set; }
+        public StorageFile TargetFile { get; set; }
+        public string UploadFolderPath { get; set; }
+
+        public CancellationTokenSource Cancellation { get; set; }
+
+        public string TargetText
+        {
+            get { return _targetText; }
+            set
+            {
+                if (_targetText == value)
+                {
+                    return;
+                }
+
+                _targetText = value;
+                Notify("TargetText");
+            }
+        }
+
+        public string IconGlyph
+        {
+            get { return _iconGlyph; }
+            set
+            {
+                if (_iconGlyph == value)
+                {
+                    return;
+                }
+
+                _iconGlyph = value;
+                Notify("IconGlyph");
+            }
+        }
+
+        public string IconColor
+        {
+            get { return _iconColor; }
+            set
+            {
+                if (_iconColor == value)
+                {
+                    return;
+                }
+
+                _iconColor = value;
+                _iconBrush = CreateIconBrush(value);
+                Notify("IconColor");
+                Notify("IconBrush");
+            }
+        }
+
+        public Brush IconBrush
+        {
+            get { return _iconBrush; }
+        }
+
+        private static Brush CreateIconBrush(string color)
+        {
+            try
+            {
+                if (!string.IsNullOrEmpty(color) && color.Length == 7 && color[0] == '#')
+                {
+                    int rgb = Convert.ToInt32(color.Substring(1), 16);
+                    return new SolidColorBrush(Color.FromArgb(
+                        0xFF,
+                        (byte)((rgb >> 16) & 0xFF),
+                        (byte)((rgb >> 8) & 0xFF),
+                        (byte)(rgb & 0xFF)));
+                }
+            }
+            catch
+            {
+            }
+
+            return new SolidColorBrush(Color.FromArgb(0xFF, 0xF6, 0xF6, 0xF4));
+        }
+
+        public TransferState State
+        {
+            get { return _state; }
+            set
+            {
+                if (_state == value)
+                {
+                    return;
+                }
+
+                _state = value;
+                Notify("State");
+                Notify("IsRunning");
+                Notify("CanRetry");
+            }
+        }
+
+        public bool IsRunning
+        {
+            get { return _state == TransferState.Running; }
+        }
+
+        public bool CanRetry
+        {
+            get
+            {
+                if (_state == TransferState.Running || _state == TransferState.Completed)
+                {
+                    return false;
+                }
+
+                switch (Kind)
+                {
+                    case TransferKind.Upload:
+                        return SourceStorageFile != null;
+                    case TransferKind.Image:
+                        return SourceFile != null;
+                    default:
+                        return SourceFile != null && TargetFile != null;
+                }
+            }
+        }
 
         public double Progress
         {
             get { return _progress; }
             set
             {
+                if (value < 0)
+                {
+                    value = 0;
+                }
+                else if (value > 100)
+                {
+                    value = 100;
+                }
+
+                if (_progress == value)
+                {
+                    return;
+                }
+
                 _progress = value;
                 ProgressText = value >= 100 ? "100%" : value.ToString("0") + "%";
-                if (PropertyChanged != null)
-                    PropertyChanged(this, new PropertyChangedEventArgs("Progress"));
-                if (PropertyChanged != null)
-                    PropertyChanged(this, new PropertyChangedEventArgs("ProgressText"));
+                Notify("Progress");
             }
         }
 
@@ -2684,23 +3961,40 @@ namespace LumiaYD
             get { return _statusText; }
             set
             {
+                if (_statusText == value)
+                {
+                    return;
+                }
+
                 _statusText = value;
-                if (PropertyChanged != null)
-                    PropertyChanged(this, new PropertyChangedEventArgs("StatusText"));
+                Notify("StatusText");
             }
         }
 
         public string ProgressText
         {
             get { return _progressText; }
-            set
+            private set
             {
+                if (_progressText == value)
+                {
+                    return;
+                }
+
                 _progressText = value;
-                if (PropertyChanged != null)
-                    PropertyChanged(this, new PropertyChangedEventArgs("ProgressText"));
+                Notify("ProgressText");
             }
         }
 
         public event PropertyChangedEventHandler PropertyChanged;
+
+        private void Notify(string propertyName)
+        {
+            PropertyChangedEventHandler handler = PropertyChanged;
+            if (handler != null)
+            {
+                handler(this, new PropertyChangedEventArgs(propertyName));
+            }
+        }
     }
 }

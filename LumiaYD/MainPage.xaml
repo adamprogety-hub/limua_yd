@@ -13,6 +13,59 @@ Foreground="{StaticResource PhoneForegroundBrush}"
 SupportedOrientations="Portrait" Orientation="Portrait"
 shell:SystemTray.IsVisible="True">
 
+    <phone:PhoneApplicationPage.Resources>
+        <DataTemplate x:Key="TransferRowTemplate">
+            <Border Background="{StaticResource NothingGraphiteBrush}"
+                    BorderBrush="{StaticResource NothingBorderDarkBrush}" BorderThickness="1"
+                    CornerRadius="20" Padding="16,14" Margin="0,0,0,10"
+                    Tap="TransferRow_Tap">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="44"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <Border Width="44" Height="44" CornerRadius="14"
+                            Background="{StaticResource NothingGraphiteRaisedBrush}"
+                            VerticalAlignment="Top">
+                        <TextBlock Text="{Binding IconGlyph}" FontFamily="{StaticResource PhosphorFont}"
+                                   FontSize="22" Foreground="{Binding IconBrush}"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+
+                    <StackPanel Grid.Column="1" Margin="12,0,12,0" VerticalAlignment="Center">
+                        <TextBlock Text="{Binding FileName}" FontSize="19"
+                                   Foreground="{StaticResource NothingWhiteBrush}"
+                                   FontFamily="Segoe UI Semilight" TextWrapping="NoWrap"
+                                   TextTrimming="WordEllipsis"/>
+                        <TextBlock Text="{Binding TargetText}" FontSize="11"
+                                   Foreground="{StaticResource NothingMutedDarkBrush}"
+                                   FontFamily="Segoe UI Semibold" Margin="0,2,0,0"
+                                   TextWrapping="NoWrap" TextTrimming="WordEllipsis"/>
+                        <ProgressBar Value="{Binding Progress}" Maximum="100" Height="4"
+                                     Margin="0,8,0,0" Foreground="{StaticResource NothingWhiteBrush}"
+                                     Background="{StaticResource NothingBorderDarkBrush}"
+                                     BorderThickness="0"/>
+                        <TextBlock Text="{Binding StatusText}" FontSize="12"
+                                   Foreground="{StaticResource NothingMutedDarkBrush}"
+                                   FontFamily="Segoe UI" Margin="0,4,0,0"
+                                   TextWrapping="NoWrap" TextTrimming="WordEllipsis"/>
+                    </StackPanel>
+
+                    <StackPanel Grid.Column="2" VerticalAlignment="Center" HorizontalAlignment="Right">
+                        <TextBlock Text="{Binding ProgressText}" FontSize="13"
+                                   Foreground="{StaticResource NothingWhiteBrush}"
+                                   FontFamily="Segoe UI Semibold" HorizontalAlignment="Right"/>
+                        <TextBlock Text="&#xE13A;" FontFamily="{StaticResource PhosphorFont}" FontSize="12"
+                                   Foreground="{StaticResource NothingMutedDarkBrush}"
+                                   HorizontalAlignment="Right" Margin="0,4,0,0"/>
+                    </StackPanel>
+                </Grid>
+            </Border>
+        </DataTemplate>
+    </phone:PhoneApplicationPage.Resources>
+
     <Grid x:Name="LayoutRoot" Background="Black">
 
         <!-- ГЛАВНЫЙ ЭКРАН -->
@@ -96,44 +149,81 @@ shell:SystemTray.IsVisible="True">
                 </Grid>
             </phone:PivotItem>
 
-            <!-- ВКЛАДКА 2: ЗАГРУЗКИ (НОВЫЙ ДИЗАЙН) -->
-            <phone:PivotItem Header="загрузки">
-                <Grid Margin="12,0,12,0">
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="*"/>
-                    </Grid.RowDefinitions>
+            <!-- ВКЛАДКА 2: ПЕРЕДАЧИ -->
+            <phone:PivotItem Header="передачи">
+                <Grid>
+                    <ScrollViewer x:Name="TransfersScrollViewer" VerticalScrollBarVisibility="Auto">
+                        <StackPanel Margin="16,0,16,24">
 
-                    <TextBlock x:Name="SyncStatusText" Text="Нет активных задач" Foreground="#666666" FontSize="18" HorizontalAlignment="Center" VerticalAlignment="Center" FontFamily="Segoe UI Semilight"/>
-
-                    <ListBox x:Name="TransferListBox" Grid.Row="1" Margin="0,12,0,0">
-                        <ListBox.ItemTemplate>
-                            <DataTemplate>
-                                <Border BorderBrush="#2A2A2A" BorderThickness="0,0,0,1" Padding="0,12,0,12">
-                                    <Grid>
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="48"/>
-                                            <ColumnDefinition Width="*"/>
-                                            <ColumnDefinition Width="60"/>
-                                        </Grid.ColumnDefinitions>
-
-                                        <!-- Иконка направления -->
-                                        <Path Grid.Column="0" Data="{Binding IconPath}" Fill="{Binding IconColor}" Width="24" Height="24" VerticalAlignment="Center" HorizontalAlignment="Center"/>
-
-                                        <!-- Информация о файле -->
-                                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="12,0,0,0">
-                                            <TextBlock Text="{Binding FileName}" FontSize="20" Foreground="White" TextWrapping="NoWrap" FontFamily="Segoe UI Semilight"/>
-                                            <TextBlock Text="{Binding StatusText}" FontSize="14" Foreground="#999999" Margin="0,2,0,0"/>
-                                            <ProgressBar Value="{Binding Progress}" Maximum="100" Height="4" Margin="0,6,0,0" Foreground="#0078D7" Background="#333333"/>
+                            <!-- ПУСТОЕ СОСТОЯНИЕ -->
+                            <Border x:Name="TransfersEmptyState"
+                                    Background="{StaticResource NothingGraphiteBrush}"
+                                    BorderBrush="{StaticResource NothingBorderDarkBrush}"
+                                    BorderThickness="1" CornerRadius="26" Padding="24"
+                                    Margin="0,8,0,0">
+                                <StackPanel>
+                                    <Border Width="64" Height="64" CornerRadius="20"
+                                            Background="{StaticResource NothingGraphiteRaisedBrush}"
+                                            HorizontalAlignment="Left">
+                                        <TextBlock Text="&#xE20C;" FontFamily="{StaticResource PhosphorFont}"
+                                                   FontSize="30" Foreground="{StaticResource NothingWhiteBrush}"
+                                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                    </Border>
+                                    <TextBlock Text="ПОКА НИЧЕГО НЕТ" FontSize="22"
+                                               Foreground="{StaticResource NothingWhiteBrush}"
+                                               FontFamily="Segoe UI Semilight" Margin="0,18,0,0"/>
+                                    <TextBlock Text="Здесь появятся загрузки на Диск и скачивания на телефон."
+                                               FontSize="13" Foreground="{StaticResource NothingMutedDarkBrush}"
+                                               FontFamily="Segoe UI" TextWrapping="Wrap" Margin="0,6,0,0"/>
+                                    <Button Style="{StaticResource NothingDarkPillButton}"
+                                            HorizontalAlignment="Left" Margin="0,18,0,0"
+                                            Click="OpenCloudFromTransfers_Click">
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="&#xE24A;" FontFamily="{StaticResource PhosphorFont}"
+                                                       FontSize="17" Foreground="{StaticResource NothingWhiteBrush}"
+                                                       VerticalAlignment="Center"/>
+                                            <TextBlock Text="ОТКРЫТЬ ОБЛАКО" Style="{StaticResource NothingDarkPillLabel}"/>
                                         </StackPanel>
+                                    </Button>
+                                </StackPanel>
+                            </Border>
 
-                                        <!-- Процент или статус -->
-                                        <TextBlock Grid.Column="2" Text="{Binding ProgressText}" FontSize="16" Foreground="#999999" VerticalAlignment="Center" HorizontalAlignment="Right" FontFamily="Segoe UI Semibold"/>
-                                    </Grid>
-                                </Border>
-                            </DataTemplate>
-                        </ListBox.ItemTemplate>
-                    </ListBox>
+                            <!-- АКТИВНЫЕ ПЕРЕДАЧИ -->
+                            <StackPanel x:Name="ActiveTransfersSection" Visibility="Collapsed">
+                                <TextBlock x:Name="ActiveTransfersTitle" Text="АКТИВНЫЕ"
+                                           FontSize="11" FontFamily="Segoe UI Semibold"
+                                           Foreground="{StaticResource NothingMutedDarkBrush}"
+                                           Margin="4,0,4,10"/>
+                                <ItemsControl x:Name="ActiveTransfersList"
+                                              ItemTemplate="{StaticResource TransferRowTemplate}"/>
+                            </StackPanel>
+
+                            <!-- ЗАВЕРШЁННЫЕ ПЕРЕДАЧИ -->
+                            <StackPanel x:Name="CompletedTransfersSection" Visibility="Collapsed"
+                                        Margin="0,16,0,0">
+                                <Grid Margin="4,0,4,10">
+                                    <TextBlock x:Name="CompletedTransfersTitle" Text="ЗАВЕРШЁННЫЕ"
+                                               FontSize="11" FontFamily="Segoe UI Semibold"
+                                               Foreground="{StaticResource NothingMutedDarkBrush}"
+                                               VerticalAlignment="Center"/>
+                                    <Button x:Name="ClearCompletedButton"
+                                            Style="{StaticResource NothingDarkPillButton}"
+                                            Height="34" Padding="12,0" HorizontalAlignment="Right"
+                                            Visibility="Collapsed"
+                                            Click="ClearCompletedTransfers_Click">
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="&#xE4A6;" FontFamily="{StaticResource PhosphorFont}"
+                                                       FontSize="14" Foreground="{StaticResource NothingWhiteBrush}"
+                                                       VerticalAlignment="Center"/>
+                                            <TextBlock Text="ОЧИСТИТЬ" Style="{StaticResource NothingDarkPillLabel}"/>
+                                        </StackPanel>
+                                    </Button>
+                                </Grid>
+                                <ItemsControl x:Name="CompletedTransfersList"
+                                              ItemTemplate="{StaticResource TransferRowTemplate}"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </ScrollViewer>
                 </Grid>
             </phone:PivotItem>
 
@@ -405,31 +495,215 @@ shell:SystemTray.IsVisible="True">
                                Foreground="{StaticResource NothingMutedDarkBrush}" VerticalAlignment="Center" Margin="8,0,0,0"/>
                 </StackPanel>
             </Border>
+
+            <!-- ОСТРОВ ПЕРЕДАЧИ -->
+            <Border x:Name="TransferIsland" Style="{StaticResource NothingFloatingCard}"
+                    Margin="16,0,16,10" Visibility="Collapsed">
+                <StackPanel>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
+                        <Border Width="42" Height="42" CornerRadius="21" Background="#EFEFED"
+                                VerticalAlignment="Center">
+                            <TextBlock x:Name="TransferIslandIcon" Text="&#xE20C;"
+                                       FontFamily="{StaticResource PhosphorFont}" FontSize="20"
+                                       Foreground="{StaticResource NothingInkBrush}"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+
+                        <StackPanel Grid.Column="1" Margin="12,0,8,0" VerticalAlignment="Center">
+                            <TextBlock x:Name="TransferIslandTitle" FontSize="17"
+                                       FontFamily="Segoe UI Semibold"
+                                       Foreground="{StaticResource NothingInkBrush}"
+                                       TextTrimming="WordEllipsis"/>
+                            <TextBlock x:Name="TransferIslandSubtitle" FontSize="10"
+                                       FontFamily="Segoe UI Semibold"
+                                       Foreground="{StaticResource NothingMutedLightBrush}"
+                                       Margin="0,2,0,0" TextTrimming="WordEllipsis"/>
+                        </StackPanel>
+
+                        <Button Grid.Column="2" Style="{StaticResource NothingCloseButton}"
+                                Width="36" Height="36" Click="TransferIslandClose_Click"
+                                VerticalAlignment="Center">
+                            <TextBlock Text="&#xE4F6;" FontFamily="{StaticResource PhosphorFont}" FontSize="16"
+                                       Foreground="{StaticResource NothingInkBrush}"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Button>
+                    </Grid>
+
+                    <!-- ОСТАНОВИТЬ АКТИВНУЮ -->
+                    <Grid x:Name="TransferRunningActions" Margin="0,6,0,0" Visibility="Collapsed">
+                        <Button Style="{StaticResource NothingActionTile}" Click="TransferCancelAction_Click">
+                            <StackPanel>
+                                <Border Width="42" Height="42" CornerRadius="21"
+                                        Background="{StaticResource NothingRedSoftBrush}"
+                                        HorizontalAlignment="Center">
+                                    <TextBlock Text="&#xE4F6;" FontFamily="{StaticResource PhosphorFont}"
+                                               FontSize="20" Foreground="{StaticResource NothingRedBrush}"
+                                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                </Border>
+                                <TextBlock Text="ОСТАНОВИТЬ" Style="{StaticResource NothingActionTileLabel}"
+                                           FontSize="9" Foreground="{StaticResource NothingRedBrush}"/>
+                            </StackPanel>
+                        </Button>
+                    </Grid>
+
+                    <!-- ПОВТОРИТЬ ИЛИ УБРАТЬ -->
+                    <Grid x:Name="TransferRetryRemoveActions" Margin="0,6,0,0" Visibility="Collapsed">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+
+                        <Button Grid.Column="0" Style="{StaticResource NothingActionTile}"
+                                Click="TransferRetryAction_Click">
+                            <StackPanel>
+                                <Border Width="42" Height="42" CornerRadius="21" Background="#EFEFED"
+                                        HorizontalAlignment="Center">
+                                    <TextBlock Text="&#xE094;" FontFamily="{StaticResource PhosphorFont}"
+                                               FontSize="20" Foreground="{StaticResource NothingInkBrush}"
+                                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                </Border>
+                                <TextBlock Text="ПОВТОРИТЬ" Style="{StaticResource NothingActionTileLabel}"
+                                           FontSize="9"/>
+                            </StackPanel>
+                        </Button>
+
+                        <Button Grid.Column="1" Style="{StaticResource NothingActionTile}"
+                                Click="TransferRemoveAction_Click">
+                            <StackPanel>
+                                <Border Width="42" Height="42" CornerRadius="21"
+                                        Background="{StaticResource NothingRedSoftBrush}"
+                                        HorizontalAlignment="Center">
+                                    <TextBlock Text="&#xE4A6;" FontFamily="{StaticResource PhosphorFont}"
+                                               FontSize="20" Foreground="{StaticResource NothingRedBrush}"
+                                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                </Border>
+                                <TextBlock Text="УБРАТЬ" Style="{StaticResource NothingActionTileLabel}"
+                                           Foreground="{StaticResource NothingRedBrush}"/>
+                            </StackPanel>
+                        </Button>
+                    </Grid>
+
+                    <!-- ТОЛЬКО УБРАТЬ -->
+                    <Grid x:Name="TransferRemoveActions" Margin="0,6,0,0" Visibility="Collapsed">
+                        <Button Style="{StaticResource NothingActionTile}" Click="TransferRemoveAction_Click">
+                            <StackPanel>
+                                <Border Width="42" Height="42" CornerRadius="21"
+                                        Background="{StaticResource NothingRedSoftBrush}"
+                                        HorizontalAlignment="Center">
+                                    <TextBlock Text="&#xE4A6;" FontFamily="{StaticResource PhosphorFont}"
+                                               FontSize="20" Foreground="{StaticResource NothingRedBrush}"
+                                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                </Border>
+                                <TextBlock Text="УБРАТЬ" Style="{StaticResource NothingActionTileLabel}"
+                                           Foreground="{StaticResource NothingRedBrush}"/>
+                            </StackPanel>
+                        </Button>
+                    </Grid>
+                </StackPanel>
+            </Border>
         </StackPanel>
 
         <!-- ЭКРАН АВТОРИЗАЦИИ -->
         <Grid x:Name="AuthArea" Canvas.ZIndex="100" Background="Black">
-            <StackPanel VerticalAlignment="Center" Margin="32,0,32,0">
-                <TextBlock Text="ЯНДЕКС ДИСК" FontSize="42" FontWeight="Bold" HorizontalAlignment="Center" Margin="0,0,0,8" FontFamily="Segoe UI Semilight"/>
-                <TextBlock Text="ВОЙДИТЕ В АККАУНТ" Foreground="#666666" FontSize="16" HorizontalAlignment="Center" Margin="0,0,0,32" FontFamily="Segoe UI"/>
+            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <StackPanel Margin="24,36,24,36">
 
-                <TextBlock Text="ЛОГИН" Foreground="#666666" FontSize="14" FontFamily="Segoe UI Semibold"/>
-                <TextBox x:Name="LoginTextBox" Margin="0,4,0,16" FontSize="22" Background="#1F1F1F" Foreground="White" BorderBrush="#333333">
-                    <TextBox.InputScope>
-                        <InputScope>
-                            <InputScopeName NameValue="EmailSmtpAddress"/>
-                        </InputScope>
-                    </TextBox.InputScope>
-                </TextBox>
+                    <Grid Width="64" Height="64" HorizontalAlignment="Left">
+                        <Border Width="64" Height="64" CornerRadius="32"
+                                Background="{StaticResource NothingGraphiteBrush}"
+                                BorderBrush="{StaticResource NothingBorderDarkBrush}" BorderThickness="1"/>
+                        <TextBlock Text="&#xE24A;" FontFamily="{StaticResource PhosphorFont}" FontSize="28"
+                                   Foreground="{StaticResource NothingWhiteBrush}"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Grid>
 
-                <TextBlock Text="ПАРОЛЬ ПРИЛОЖЕНИЯ" Foreground="#666666" FontSize="14" FontFamily="Segoe UI Semibold"/>
-                <PasswordBox x:Name="PasswordBox" Margin="0,4,0,24" FontSize="22" Background="#1F1F1F" Foreground="White" BorderBrush="#333333"/>
+                    <TextBlock Text="ЯНДЕКС ДИСК" FontSize="34" FontFamily="Segoe UI Light"
+                               Foreground="{StaticResource NothingWhiteBrush}" Margin="0,18,0,0"/>
+                    <TextBlock Text="WEBDAV · NOKIA LUMIA 925" FontSize="10" FontFamily="Segoe UI Semibold"
+                               Foreground="{StaticResource NothingMutedDarkBrush}" Margin="0,6,0,0"/>
 
-                <Button x:Name="LoginButton" Content="ВОЙТИ" Click="LoginButton_Click" Height="72" Background="#0078D7" Foreground="White" FontSize="22" FontFamily="Segoe UI Semibold"/>
-                <ProgressBar x:Name="AuthProgress" IsIndeterminate="True" Visibility="Collapsed" Height="4" Margin="0,16,0,0" Foreground="#0078D7" Background="#333333"/>
-                <TextBlock x:Name="StatusText" Text="ВВЕДИТЕ ЛОГИН И ПАРОЛЬ ПРИЛОЖЕНИЯ" Foreground="#999999" FontSize="14" HorizontalAlignment="Center" TextWrapping="Wrap" Margin="0,16,0,0" FontFamily="Segoe UI"/>
-                <TextBlock Text="Пароль приложения создаётся в Яндекс ID → Безопасность → Пароли приложений. Обычный пароль от аккаунта не подойдёт." Foreground="#666666" FontSize="12" TextWrapping="Wrap" Margin="0,24,0,0" FontFamily="Segoe UI"/>
-            </StackPanel>
+                    <Border Background="{StaticResource NothingGraphiteBrush}"
+                            BorderBrush="{StaticResource NothingBorderDarkBrush}" BorderThickness="1"
+                            CornerRadius="26" Padding="20" Margin="0,28,0,0">
+                        <StackPanel>
+                            <TextBlock Text="ВХОД В АККАУНТ" FontSize="11" FontFamily="Segoe UI Semibold"
+                                       Foreground="{StaticResource NothingMutedDarkBrush}"/>
+
+                            <TextBlock Text="ЛОГИН" FontSize="10" FontFamily="Segoe UI Semibold"
+                                       Foreground="{StaticResource NothingMutedDarkBrush}" Margin="2,18,0,6"/>
+                            <TextBox x:Name="LoginTextBox" Style="{StaticResource NothingAuthField}"
+                                     KeyDown="LoginTextBox_KeyDown">
+                                <TextBox.InputScope>
+                                    <InputScope>
+                                        <InputScopeName NameValue="EmailSmtpAddress"/>
+                                    </InputScope>
+                                </TextBox.InputScope>
+                            </TextBox>
+
+                            <Grid Margin="2,16,2,6">
+                                <TextBlock Text="ПАРОЛЬ ПРИЛОЖЕНИЯ" FontSize="10" FontFamily="Segoe UI Semibold"
+                                           Foreground="{StaticResource NothingMutedDarkBrush}" VerticalAlignment="Center"/>
+                                <Button x:Name="PasswordRevealButton" Style="{StaticResource NothingLinkButton}"
+                                        HorizontalAlignment="Right" Click="PasswordRevealButton_Click">
+                                    <TextBlock x:Name="PasswordRevealLabel" Text="ПОКАЗАТЬ"
+                                               Style="{StaticResource NothingLinkLabel}"/>
+                                </Button>
+                            </Grid>
+                            <Grid>
+                                <PasswordBox x:Name="PasswordBox" Style="{StaticResource NothingAuthPasswordField}"
+                                             PasswordChanged="PasswordBox_PasswordChanged"
+                                             KeyDown="PasswordBox_KeyDown"/>
+                                <TextBox x:Name="PasswordTextBox" Style="{StaticResource NothingAuthField}"
+                                         Visibility="Collapsed" KeyDown="PasswordTextBox_KeyDown"
+                                         TextChanged="PasswordTextBox_TextChanged"/>
+                            </Grid>
+
+                            <Button x:Name="LoginButton" Style="{StaticResource NothingLightPillButton}"
+                                    Margin="0,20,0,0" Click="LoginButton_Click">
+                                <TextBlock x:Name="LoginButtonLabel" Text="ВОЙТИ"
+                                           Style="{StaticResource NothingLightPillLabel}"/>
+                            </Button>
+
+                            <ProgressBar x:Name="AuthProgress" IsIndeterminate="True" Visibility="Collapsed"
+                                         Height="3" Margin="0,12,0,0"
+                                         Foreground="{StaticResource NothingWhiteBrush}"
+                                         Background="{StaticResource NothingBorderDarkBrush}"
+                                         BorderThickness="0"/>
+                            <TextBlock x:Name="StatusText" Text="ВВЕДИТЕ ЛОГИН И ПАРОЛЬ ПРИЛОЖЕНИЯ"
+                                       Foreground="{StaticResource NothingMutedDarkBrush}" FontSize="12"
+                                       FontFamily="Segoe UI" TextWrapping="Wrap" Margin="0,12,0,0"/>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Background="Transparent"
+                            BorderBrush="{StaticResource NothingBorderDarkBrush}" BorderThickness="1"
+                            CornerRadius="22" Padding="20" Margin="0,14,0,0">
+                        <StackPanel>
+                            <TextBlock Text="ПАРОЛЬ ПРИЛОЖЕНИЯ" FontSize="10" FontFamily="Segoe UI Semibold"
+                                       Foreground="{StaticResource NothingMutedDarkBrush}"/>
+                            <TextBlock Text="Обычный пароль от аккаунта не подойдёт. Создайте отдельный пароль в Яндекс ID → Безопасность → Пароли приложений."
+                                       Foreground="{StaticResource NothingMutedDarkBrush}" FontSize="12"
+                                       FontFamily="Segoe UI" TextWrapping="Wrap" Margin="0,8,0,0"/>
+                            <Button Style="{StaticResource NothingDarkPillButton}"
+                                    HorizontalAlignment="Left" Margin="0,14,0,0"
+                                    Click="OpenAppPasswordHelp_Click">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="&#xE13A;" FontFamily="{StaticResource PhosphorFont}"
+                                               FontSize="13" Foreground="{StaticResource NothingWhiteBrush}"
+                                               VerticalAlignment="Center"/>
+                                    <TextBlock Text="ОТКРЫТЬ ИНСТРУКЦИЮ" Style="{StaticResource NothingDarkPillLabel}"/>
+                                </StackPanel>
+                            </Button>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+            </ScrollViewer>
         </Grid>
 
         <!-- МОДАЛЬНЫЙ СЛОЙ: МЕНЮ АККАУНТА И КАРТОЧКА ПОДТВЕРЖДЕНИЯ -->
