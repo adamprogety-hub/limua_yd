@@ -66,6 +66,12 @@
 
     <Grid x:Name="LayoutRoot" Background="Black">
 
+        <!-- Фоновая картинка во весь экран -->
+        <Image Source="/Assets/Background.png"
+               Stretch="UniformToFill"
+               HorizontalAlignment="Center" VerticalAlignment="Center"
+               Canvas.ZIndex="0" Opacity="1"/>
+
         <!-- ГЛАВНЫЙ ЭКРАН (METRO PIVOT) -->
         <phone:Pivot x:Name="MainPivot" Title="ЯНДЕКС ДИСК" Visibility="Collapsed" Foreground="White" SelectionChanged="MainPivot_SelectionChanged">
 
